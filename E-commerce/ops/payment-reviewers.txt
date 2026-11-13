@@ -4,6 +4,8 @@
 # la lista que había en el ÚLTIMO DESPLIEGUE (no la de este commit) distinto de la autora.
 #
 # RÉGIMEN TRANSITORIO (desde 2026-11-13): lista vacía a propósito. Mientras esté vacía, producción queda bloqueada.
+# La dueña del repositorio (saraandradec) no puede figurar como revisora independiente: se ignora. Quien escribió commits
+# del PR tampoco cuenta como revisora de ese PR. El alta inicial solo existe en el PRIMER despliegue a producción.
 # Alta de la primera revisora: agregar su usuario aquí en el PR `integracion` -> `main` que ella aprueba; al desplegar,
 # ops/deploy.sh muestra la lista propuesta y Sara debe escribir ALTA-REVISORA. Las altas siguientes las aprueba alguien
 # que ya esté en la lista. Agregarla también en las líneas [PAGO] de .github/CODEOWNERS.

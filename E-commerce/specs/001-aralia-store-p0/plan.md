@@ -4,7 +4,7 @@
 
 **Input**: Feature specification from `specs/001-aralia-store-p0/spec.md` + anexos T0 ([threat-model.md](./threat-model.md) v1.1, [data-classification.md](./data-classification.md), [compliance-mapping.md](./compliance-mapping.md))
 
-**Tier TRACE**: T0 · **Iteración del plan**: 3 (ver §Registro de iteraciones)
+**Tier TRACE**: T0 · **Iteración del plan**: 4 (ver §Registro de iteraciones)
 
 ## Summary
 
@@ -59,7 +59,7 @@ La constitución del repo fue **ratificada v1.0.0 el 2026-11-13** y **enmendada 
 ```text
 specs/001-aralia-store-p0/
 ├── spec.md · threat-model.md (v1.2) · data-classification.md · compliance-mapping.md (con §7)
-├── plan.md                  # Este archivo (iteración 3)
+├── plan.md                  # Este archivo (iteración 4)
 ├── research.md              # Fase 0 (R-01…R-24, v3)
 ├── data-model.md            # Fase 1 (v3)
 ├── quickstart.md            # Fase 1
@@ -158,7 +158,7 @@ E-commerce/
 | Hallazgo | Resolución | Artefacto |
 |----------|-----------|-----------|
 | GitHub Free no ofrece environments protegidos ni protección de rama en repos privados | Despliegue **local** `ops/deploy.sh`; la llave SSH no vive en GitHub; el CI solo arma el paquete | Constitución 1.1.0, R-15, T009 |
-| Gates T0 de la Fase 1 (security, code-reviewer, architect + 6 verificaciones adversariales) | Criterio invertido: todo commit desde el último despliegue exige PR aprobado (salvo documentación exenta); lista de revisoras leída del último despliegue; registro de despliegues local; el paquete se compara con `git archive`; CI sin suites omitidas en silencio; cargador de secretos falla cerrado | `ops/deploy.sh`, `ecommerce-ci.yml`, `aralia-secrets-loader.php`, `tests/ops/deploy_test.sh` |
+| Gates T0 de la Fase 1, vueltas 2 y 3 (security, code-reviewer, architect + 6 verificaciones adversariales) | Criterio invertido: todo commit desde el último despliegue exige PR aprobado (salvo documentación exenta); lista de revisoras leída del último despliegue; registro de despliegues local; el paquete se compara con `git archive`; CI sin suites omitidas en silencio; cargador de secretos falla cerrado | `ops/deploy.sh`, `ecommerce-ci.yml`, `aralia-secrets-loader.php`, `tests/ops/deploy_test.sh` |
 
 ### Iteración 2 — respuesta a la revisión de arquitectura (iteración 1)
 
@@ -237,7 +237,7 @@ E-commerce/
 | N-11 centinela | Pedido centinela mensual en producción, aislado | R-11, runbook sentinel |
 | N-12 revisión humana después de abrir | Decidido por Sara: revisión humana obligatoria en cada cambio del camino de pago (CODEOWNERS; con plan Free lo hace cumplir `ops/deploy.sh`) | R-15 |
 | B-01, B-02 | Texto del spec alineado (AC 1.4, borde de pasarela caída, FR-060) | spec |
-| `ops/deploy.sh` (~400 líneas propias) | GitHub Free no protege environments ni ramas; una llave SSH en GitHub quedaría al alcance de cualquier rama (R-15, enmienda 1.1.0) | Actions + environment de producción: no existe en el plan Free. GitHub Team/Pro lo resolvería: se reevalúa al contratar a la revisora |
+| `ops/deploy.sh` (~400 líneas propias) | GitHub Free no protege environments ni ramas; una llave SSH en GitHub quedaría al alcance de cualquier rama (R-15, enmienda 1.1.0) | Actions + environment de producción: no existe en el plan Free. GitHub Pro/Team lo resolvería: es condición de la primera salida a producción (`deploy.sh` se niega sin protección de rama; T166) |
 | B-03 | `n` en cada apertura, 1–999, tope de 30 aperturas | R-10, contracts/wompi §3 |
 | B-04 | id persistido aunque esté `deferred`; idempotencia por estado verificado | R-02 §2b, contracts/wompi §3 |
 | B-05 | APPROVED sobre `cancelled` de más de 24 h: misma ruta con alerta | R-02 §3, data-model §3 |

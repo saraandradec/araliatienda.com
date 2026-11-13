@@ -1,6 +1,6 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 → 1.1.0 (MINOR, 2026-11-13: régimen transitorio de la revisora humana; despliegue local por plan Free de GitHub)
+- Version change: 1.0.0 → 1.1.1 (1.1.0 MINOR, 2026-11-13: régimen transitorio de la revisora humana; despliegue local por plan Free de GitHub. 1.1.1 PATCH, 2026-11-13: precisión del alcance tras los gates T0)
 - Enmienda 1.1.0: principio IX y Flujo de desarrollo ajustados (ver sección Enmiendas). Aprobada por Sara Andrade el 2026-11-13.
 - Principios: I. Tienda normal, bien hecha · II. Proponer antes que buscar · III. Un toque para un look · IV. Tono solo donde importa · V. Escasez y urgencia solo reales · VI. Cada compra abre la siguiente · VII. Autoservicio · VIII. Reglas de marca · IX. Dinero y datos seguros (T0) · X. Pruebas primero
 - Secciones agregadas: Restricciones técnicas · Flujo de desarrollo y gates · Governance
@@ -70,6 +70,8 @@ Esta constitución prevalece sobre cualquier otra práctica del proyecto. Una en
 
 ### Enmiendas
 
+- **1.1.1 (2026-11-13, PATCH — aclaración, sin cambiar principios)** — Tras los gates T0 de la Fase 1: (1) el alcance de la revisión humana pasa de una lista de rutas a **todo el repositorio** salvo `specs/` e `ops/inventory.md`; (2) la puerta de producción se ejecuta con el script del último despliegue y la lista de revisoras se lee del último despliegue; (3) el alta inicial de la revisora solo existe en el primer despliegue (`ALTA-REVISORA`); (4) régimen transitorio operativo: el trabajo se fusiona en `integracion` y la revisora aprueba un único PR hacia `main`; (5) condiciones de la primera salida a producción (T166): staging en cuenta separada y protección de rama de GitHub. Aprobación de Sara pendiente de registrar en el ledger al firmar la fase.
+
 - **1.1.0 (2026-11-13, Sara Andrade)** — *Motivo*: el repositorio privado está en el plan Free de GitHub, sin environments protegidos ni protección de rama, y la revisora técnica aún no está contratada. *Cambios*: (1) el despliegue se hace con `ops/deploy.sh` desde el equipo de Sara (la llave SSH no vive en GitHub) y exige `main`, CI verde, checksum, staging previo y un PR aprobado por alguien de `ops/payment-reviewers.txt` distinto de la autora; (2) régimen transitorio de la revisora descrito en el principio IX. Artefactos actualizados: research R-15 y R-16, plan.md, tasks.md, quickstart.md, `ops/`.
 
-**Version**: 1.1.0 | **Ratified**: 2026-11-13 (Sara Andrade) | **Last Amended**: 2026-11-13
+**Version**: 1.1.1 | **Ratified**: 2026-11-13 (Sara Andrade) | **Last Amended**: 2026-11-13

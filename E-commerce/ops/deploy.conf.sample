@@ -1,4 +1,5 @@
-# Copiar como ops/deploy.conf (ignorado por git). No contiene secretos: la llave SSH vive en ~/.ssh y ssh-agent.
+# Copiar como ops/deploy.conf (ignorado por git) y `chmod 600 ops/deploy.conf`. No contiene secretos: la llave SSH vive
+# en ~/.ssh y ssh-agent. El script NO ejecuta este archivo: solo lee líneas CLAVE="valor" y valida cada valor.
 #
 # En ~/.ssh/config de Sara (Hostinger usa un puerto distinto de 22; confirmarlo en hPanel → SSH):
 #   Host aralia-prod
@@ -8,7 +9,7 @@
 #     IdentityFile ~/.ssh/aralia_deploy_ed25519
 #     IdentitiesOnly yes
 #     StrictHostKeyChecking yes
-#   (staging suele ser la misma cuenta: mismo Host o un alias aralia-staging con el mismo bloque)
+#   Host aralia-staging  → OTRA cuenta/usuario de Hostinger, con su propia llave (ver abajo).
 
 REPO="saraandradec/araliatienda.com"
 
@@ -19,3 +20,11 @@ STAGING_PATH="/home/u987654321/domains/staging.araliatienda.com/public_html"
 
 PRODUCTION_SSH="aralia-prod"
 PRODUCTION_PATH="/home/u123456789/domains/araliatienda.com/public_html"
+
+# Interruptores de la PRIMERA SALIDA A PRODUCCIÓN (decisiones de Sara; sin ellos el script se niega a desplegar a producción).
+# Déjalos comentados. Descomentar uno es aceptar el riesgo por escrito: el script lo avisa en cada despliegue.
+#   ALLOW_SHARED_STAGING: staging comparte cuenta SSH con producción (el código de staging, sin revisión, podría leer
+#                         sus secretos y su base de datos).
+#   ALLOW_UNPROTECTED_MAIN: la rama main no tiene protección de GitHub (Pro/Team): cualquiera con Write puede empujar sin PR.
+# ALLOW_SHARED_STAGING="yes"
+# ALLOW_UNPROTECTED_MAIN="yes"

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Pruebas de ops/deploy.sh contra un "servidor" local (sin SSH). Corre en CI (job node) y en macOS.
 #   bash tests/ops/deploy_test.sh
+# shellcheck disable=SC2034  # variables que leen las funciones de deploy.sh cargadas con source
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -115,6 +116,67 @@ expect_fail package_release "not-a-sha"
 
 echo
 
+# --- sync_release: un fallo de rsync a mitad NO debe pasar desapercibido -------------------------------
+echo "sync_release: errores de rsync"
+FAILDST="$T/failsite"; mkdir -p "$FAILDST/wp-admin" "$FAILDST/wp-includes"; echo keep > "$FAILDST/wp-config.php"
+rsync() {
+	case "$1" in
+		--version) echo "rsync  version 3.5.0  protocol version 32" ;;
+		*) case "${!#}" in */wp-includes/) return 23 ;; *) command rsync "$@" ;; esac ;;   # falla solo la copia de wp-includes/
+	esac
+}
+# En contexto `if` (igual que `sync_release ... || die` en deploy) bash ignora set -e: cada rsync debe devolver || return 1.
+if sync_release "$SRC" "" "$FAILDST" -n >/dev/null 2>&1; then fail "rsync que falla a mitad debía devolver error"; else pass "rsync que falla a mitad devuelve error (simulación)"; fi
+if sync_release "$SRC" "" "$FAILDST" >/dev/null 2>&1; then fail "rsync que falla a mitad debía devolver error (real)"; else pass "rsync que falla a mitad devuelve error (despliegue real)"; fi
+unset -f rsync
+
+# --- parse_conf: deploy.conf no se ejecuta, se valida ---------------------------------------------------
+echo "parse_conf"
+conf() { printf '%s\n' "$@" > "$T/c.conf"; }
+good=('# comentario' '' 'REPO="x/y"' 'STAGING_SSH="aralia-staging"' 'STAGING_PATH="/home/u2/domains/s/public_html"' 'PRODUCTION_SSH="aralia-prod"' 'PRODUCTION_PATH="/home/u1/domains/p/public_html"')
+conf "${good[@]}"
+if ( parse_conf "$T/c.conf" && [ "$REPO" = "x/y" ] && [ "$STAGING_SSH" = aralia-staging ] ) >/dev/null 2>&1; then pass "acepta una configuración válida"; else fail "acepta una configuración válida"; fi
+conf "${good[@]}" '. /tmp/evil.sh';                       expect_fail parse_conf "$T/c.conf"
+conf "${good[@]}" 'check_payment_reviews() { :; }';       expect_fail parse_conf "$T/c.conf"
+conf "${good[@]}" 'EVIL="1"';                             expect_fail parse_conf "$T/c.conf"
+conf "${good[@]}" 'PRODUCTION_PATH="/a b; rm -rf /"';     expect_fail parse_conf "$T/c.conf"
+conf "${good[@]}" 'PRODUCTION_SSH="-oProxyCommand=x"';    expect_fail parse_conf "$T/c.conf"
+conf "${good[@]}" 'ALLOW_SHARED_STAGING="no"';            expect_fail parse_conf "$T/c.conf"
+conf 'REPO="x/y"';                                        expect_fail parse_conf "$T/c.conf"
+
+# --- verify_own_code: el paquete debe ser idéntico a git, sin extras ------------------------------------
+echo "verify_own_code"
+V="$T/vrepo"; mkdir -p "$V/E-commerce/wp-content/themes/aralia" "$V/E-commerce/wp-content/mu-plugins" "$V/E-commerce/wp-content/plugins/aralia-core/src"
+git -C "$V" init -q -b main; git -C "$V" config user.email t@example.com; git -C "$V" config user.name t; git -C "$V" config commit.gpgsign false
+echo 'body{}' > "$V/E-commerce/wp-content/themes/aralia/style.css"
+echo '<?php // loader' > "$V/E-commerce/wp-content/mu-plugins/aralia-secrets-loader.php"
+echo '<?php // guard' > "$V/E-commerce/wp-content/mu-plugins/aralia-wompi-guard.php"
+echo '<?php // core' > "$V/E-commerce/wp-content/plugins/aralia-core/aralia-core.php"
+echo '<?php // plugin' > "$V/E-commerce/wp-content/plugins/aralia-core/src/Plugin.php"
+git -C "$V" add -A && git -C "$V" commit -q -m v && VS="$(git -C "$V" rev-parse HEAD)"
+mkpkg() { # $1 = directorio de trabajo; crea $1/x como copia fiel del árbol de git
+	rm -rf "$1"; mkdir -p "$1/x/wp-content/plugins" "$1/x/wp-content/themes" "$1/x/wp-content/mu-plugins" "$1/x/wp-content/plugins/woocommerce"
+	cp -R "$V/E-commerce/wp-content/themes/aralia" "$1/x/wp-content/themes/"
+	cp -R "$V/E-commerce/wp-content/plugins/aralia-core" "$1/x/wp-content/plugins/"
+	cp "$V/E-commerce/wp-content/mu-plugins/"*.php "$1/x/wp-content/mu-plugins/"
+	echo '<?php // tercero' > "$1/x/wp-content/plugins/woocommerce/woocommerce.php"
+}
+REPO_ROOT="$V"
+voc_pass() { mkpkg "$T/pk"; [ -z "${2:-}" ] || ( eval "$2" ); if ( verify_own_code "$VS" "$T/pk" ) >"$T/voc.out" 2>&1; then pass "$1"; else fail "$1 (debía pasar): $(tail -1 "$T/voc.out")"; fi; }
+voc_deny() { mkpkg "$T/pk"; ( cd "$T/pk/x" && eval "$2" ); if ( verify_own_code "$VS" "$T/pk" ) >"$T/voc.out" 2>&1; then fail "$1 (debía bloquear)"; else pass "$1"; fi; }
+voc_pass "paquete idéntico a git"
+voc_deny "mu-plugin extra aralia-evil.php"                  'echo "<?php evil();" > wp-content/mu-plugins/aralia-evil.php'
+voc_deny "cargador de secretos alterado"                    'echo "<?php evil();" >> wp-content/mu-plugins/aralia-secrets-loader.php'
+voc_deny "tema alterado"                                    'echo "x" >> wp-content/themes/aralia/style.css'
+voc_deny "archivo PHP extra en el tema"                     'echo "<?php evil();" > wp-content/themes/aralia/functions.php'
+voc_deny "build/ con PHP en el tema"                        'mkdir wp-content/themes/aralia/build && echo "<?php evil();" > wp-content/themes/aralia/build/x.php'
+voc_deny "build/ anidado en src/ (antes se excluía a cualquier profundidad)" 'mkdir wp-content/plugins/aralia-core/src/build && echo "<?php evil();" > wp-content/plugins/aralia-core/src/build/e.php'
+voc_deny "plugin extra fuera de la lista cerrada"           'mkdir wp-content/plugins/evil && echo "<?php" > wp-content/plugins/evil/evil.php'
+voc_deny "tema extra"                                       'mkdir wp-content/themes/evil && echo "body{}" > wp-content/themes/evil/style.css'
+voc_deny "enlace simbólico en el paquete"                   'ln -s /etc/passwd wp-content/themes/aralia/link.php'
+voc_deny "aralia-core ausente en git pero presente en el paquete" 'mkdir -p wp-content/plugins/aralia-fake && true; mv wp-content/plugins/aralia-fake wp-content/plugins/aralia-core-x'
+voc_pass "build/ con JS y asset.php de una línea es válido"  'mkdir "$T/pk/x/wp-content/plugins/aralia-core/build" && echo "console.log(1)" > "$T/pk/x/wp-content/plugins/aralia-core/build/index.js" && printf "%s\n" "<?php return array(\"dependencies\" => array(), \"version\" => \"1\");" > "$T/pk/x/wp-content/plugins/aralia-core/build/index.asset.php"'
+
 # --- check_payment_reviews: puerta de revisión humana (con `gh` simulado y un repo git temporal) -----------
 echo "check_payment_reviews"
 R="$T/repo"; mkdir -p "$R/E-commerce/ops" "$R/E-commerce/specs" "$R/E-commerce/wp-content/themes/aralia"
@@ -131,13 +193,19 @@ printf 'carol\nmallory\n' > "$R/E-commerce/ops/payment-reviewers.txt"; echo v3 >
 CC="$(commit_all 'alta de mallory + tema v3')"
 echo b > "$R/E-commerce/specs/a.md"
 CD="$(commit_all 'solo docs')"
+printf 'dave\n' > "$R/E-commerce/ops/payment-reviewers.txt"; echo v4 > "$R/E-commerce/wp-content/themes/aralia/style.css"
+CF="$(commit_all 'carol revocada, dave alta')"
+printf 'x\n' > "$R/E-commerce/ops/payment-reviewers.txt"; echo v5 > "$R/E-commerce/wp-content/themes/aralia/style.css"
+CE="$(commit_all 'la dueña como revisora')"
 
 REPO_ROOT="$R"; PROJECT_DIR="$R/E-commerce"; REPO="x/y"; LOCAL_LOG_DIR="$T/home"; mkdir -p "$LOCAL_LOG_DIR"
-GH_PRS="12 sara"; GH_HEAD="headsha"; GH_REVIEWS=""
+REVIEW_GENESIS="$C0"
+GH_PRS="12 sara"; GH_HEAD="headsha"; GH_REVIEWS=""; GH_COMMIT_LOGINS="sara"; GH_NOPR_FOR="none"
 gh() {
 	case "$*" in
-		*"/commits/"*"/pulls"*) [ -n "$GH_PRS" ] && echo "$GH_PRS" || true ;;
+		*"/commits/"*"/pulls"*) case "$*" in *"$GH_NOPR_FOR"*) ;; *) [ -n "$GH_PRS" ] && echo "$GH_PRS" || true ;; esac ;;
 		*"/reviews"*)           printf '%s' "$GH_REVIEWS" | awk '{ $1=tolower($1); print }' ;;  # imita ascii_downcase del --jq
+		*"/pulls/"*"/commits"*) printf '%s\n' "$GH_COMMIT_LOGINS" ;;
 		*"/pulls/"*)            echo "$GH_HEAD" ;;
 	esac
 }
@@ -152,8 +220,8 @@ gate_deny "lista vacía y cambios sin revisar: producción bloqueada" "$CA"
 GH_PRS=""; GH_REVIEWS=$'carol APPROVED headsha\n'
 gate_deny "push directo (sin PR fusionado en main): bloquea" "$CB" "ALTA-REVISORA"
 GH_PRS="12 sara"
-gate_pass "primera revisora con ALTA-REVISORA y aprobación vigente" "$CB" "ALTA-REVISORA"
-gate_deny "primera revisora sin confirmación escrita: bloquea" "$CB" "no"
+gate_pass "primer despliegue: ALTA-REVISORA y aprobación vigente" "$CB" "ALTA-REVISORA"
+gate_deny "primer despliegue sin confirmación escrita: bloquea" "$CB" "no"
 GH_REVIEWS=$'sara APPROVED headsha\n'
 gate_deny "la autora no puede aprobar su propio PR" "$CB" "ALTA-REVISORA"
 GH_REVIEWS=$'carol APPROVED oldsha\n'
@@ -162,6 +230,18 @@ GH_REVIEWS=$'carol APPROVED headsha\ncarol CHANGES_REQUESTED headsha\n'
 gate_deny "aprobación revocada por CHANGES_REQUESTED posterior: bloquea" "$CB" "ALTA-REVISORA"
 GH_REVIEWS=$'carol CHANGES_REQUESTED headsha\ncarol APPROVED headsha\n'
 gate_pass "CHANGES_REQUESTED seguido de APPROVED: pasa" "$CB" "ALTA-REVISORA"
+GH_REVIEWS=$'carol APPROVED headsha\n'; GH_COMMIT_LOGINS=$'sara\ncarol'
+gate_deny "la revisora escribió commits del PR: no cuenta como revisión independiente" "$CB" "ALTA-REVISORA"
+GH_COMMIT_LOGINS="sara"
+# Génesis: un commit anterior sin PR (landing) no se revisa; el resto sí
+GH_NOPR_FOR="$C0"
+gate_pass "REVIEW_GENESIS: el commit raíz sin PR queda fuera de la revisión" "$CB" "ALTA-REVISORA"
+GH_NOPR_FOR="$CA"
+gate_deny "un commit posterior al génesis sin PR sí bloquea" "$CB" "ALTA-REVISORA"
+GH_NOPR_FOR="none"
+SAVE_G="$REVIEW_GENESIS"; REVIEW_GENESIS="nosha"
+gate_deny "REVIEW_GENESIS inválido: bloquea" "$CB" "ALTA-REVISORA"
+REVIEW_GENESIS="$SAVE_G"
 
 # H-2: una cuenta añadida en el mismo PR no puede aprobarse a sí misma
 set_last "$CB"
@@ -172,6 +252,18 @@ gate_pass "carol (de la lista del último despliegue) aprueba sin preguntas" "$C
 GH_REVIEWS=$'CAROL APPROVED headsha\n'
 gate_pass "los logins se comparan sin distinguir mayúsculas" "$CC"
 
+# N3: revocar a una revisora surte efecto en el mismo despliegue
+GH_REVIEWS=$'carol APPROVED headsha\n'
+gate_deny "N3: carol revocada en el commit a desplegar ya no aprueba" "$CF"
+# N4: el alta inicial solo existe en el primer despliegue
+set_last "$CA"
+GH_REVIEWS=$'carol APPROVED headsha\n'
+gate_deny "N4: con último despliegue y lista vacía no se reabre ALTA-REVISORA" "$CB" "ALTA-REVISORA"
+# N8: la dueña del repositorio no puede ser la revisora independiente
+set_last ""
+GH_REVIEWS=$'x APPROVED headsha\n'
+gate_deny "N8: la dueña (x) en la lista no cuenta como revisora" "$CE" "ALTA-REVISORA"
+
 # Solo documentación exenta: no exige PR
 set_last "$CC"; GH_PRS=""; GH_REVIEWS=""
 gate_pass "cambio solo de specs/: exento de revisión" "$CD"
@@ -181,6 +273,5 @@ set_last "0123456789abcdef0123456789abcdef01234567"; GH_PRS="12 sara"; GH_REVIEW
 gate_deny "último despliegue desconocido en este clon: bloquea" "$CC"
 set_last "$CC"
 gate_deny "el SHA a desplegar no desciende del último despliegue: bloquea" "$CA"
-echo "$(tail -1 "$T/gate.out")" >/dev/null
 
 if [ "$fails" -eq 0 ]; then echo "deploy_test: todo OK"; else echo "deploy_test: $fails fallo(s)"; exit 1; fi

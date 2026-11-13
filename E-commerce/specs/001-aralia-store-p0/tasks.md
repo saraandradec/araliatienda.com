@@ -44,7 +44,7 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
 - [x] T006 [P] Configurar PHPCS (WordPress-Extra + reglas de seguridad) y PHPStan nivel 6 con stubs de WP/WC en `phpcs.xml.dist` y `phpstan.neon`
 - [x] T007 [P] Configurar gitleaks con los patrones de llaves de Wompi (`prv_`, `pub_prod_`, `prod_events_`, `prod_integrity_`, `test_*`) en `.gitleaks.toml`
 - [x] T008 Crear el pipeline de CI (PHPCS, PHPStan, PHPUnit, prueba de contrato, Playwright + axe, Lighthouse CI, gitleaks) en `.github/workflows/ecommerce-ci.yml` (en la raíz del repo; acciones con SHA fijado, pasos condicionados por existencia, job `release` que arma el paquete)
-- [x] T009 Crear el despliegue **local** `ops/deploy.sh` (package/staging/production; exige `main`, CI verde, checksum, staging previo y PR aprobado por `ops/payment-reviewers.txt`; `wp core verify-checksums` y `wp plugin verify-checksums` de la lista cerrada de plugins después de cada despliegue; el código propio se compara con `git archive`) con `ops/deploy.conf.sample` y `tests/ops/deploy_test.sh` (enmienda 1.1.0: el plan Free de GitHub no protege environments; `deploy.yml` eliminado)
+- [x] T009 Crear el despliegue **local** `ops/deploy.sh` (package/staging/production; exige `main`, CI verde, checksum, staging previo y PR aprobado por `ops/payment-reviewers.txt`; `wp core verify-checksums` y `wp plugin verify-checksums` de la lista cerrada de plugins después de cada despliegue; el código propio se compara con `git archive`) con `ops/deploy.conf.sample` y `tests/ops/deploy_test.sh` (enmienda 1.1.0: el plan Free de GitHub no protege environments; `deploy.yml` eliminado). Incluye `rollback`, génesis de revisión, lista de revisoras del último despliegue con `ALTA-REVISORA` solo en el primer despliegue, y comparación del paquete con `git archive`
 - [x] T010 [P] Crear la plantilla de secretos con todas las constantes de research R-16 (Wompi ×8, Brevo, Turnstile, Meta CAPI, GA4 MP, cuenta de servicio GA4, `ARALIA_PII_KEY`, llave HMAC) en `ops/templates/aralia-secrets.sample.php`
 - [x] T011 Crear el repo privado en GitHub con 2FA obligatorio y revisión obligatoria de la revisora humana nombrada para `wp-content/mu-plugins/aralia-wompi-guard/`, `core/src/{Orders,Checkout,Cart,Rest}/` (R-15) en `.github/CODEOWNERS` y `ops/payment-reviewers.txt` (régimen transitorio: provisional en CODEOWNERS `@saraandradec`; `ops/payment-reviewers.txt` vacío a propósito; con plan Free lo hace cumplir `ops/deploy.sh`; el 2FA de colaboradoras se verifica en T014)
 - [ ] T012 Contratar Hostinger Business/Cloud: PHP 8.3, SSH con llave, `DISABLE_WP_CRON` + cron real cada minuto, staging **limpio**, `aralia-secrets.php` fuera de `public_html` con permisos 600; documentarlo en `ops/baseline-config.md` (sección Hosting)
@@ -69,6 +69,8 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
 - [ ] T163 [P] Implementar el avance de reloj de Action Scheduler para pruebas (`wp action-scheduler run --hooks=aralia_order_expiry` con fecha simulada; T-PSE-ABANDON, T-HOLD-PENDING) en `tests/php/integration/ClockTest.php` y `tests/e2e/support/clock.ts`
 - [ ] T164 Implementar la bandera `--sample-catalog` de `wp aralia setup` (taxonomías, atributos y catálogo de ejemplo para local y CI) en `core/src/Cli/SetupCommand.php`
 - [ ] T165 Fijar la imagen base de Docker de wp-env en el CI (la `wordpress:php8.3` de Debian trixie falla en `apt install git` por falta del grupo `_ssh`; ver `ops/inventory.md`) antes de T020, en `.wp-env.json`/`.github/workflows/ecommerce-ci.yml`
+- [ ] T166 Condiciones de la primera salida a producción (decisiones de Sara): staging en una cuenta/usuario de Hostinger distinta de producción y GitHub Pro/Team con protección de `main`; `ops/deploy.sh` se niega a desplegar a producción sin ellas (salvo `ALLOW_SHARED_STAGING` / `ALLOW_UNPROTECTED_MAIN` en `deploy.conf`, aceptación escrita). Verificar antes de T160 en `ops/go-live-checklist.md` y `ops/compliance/accounts-2fa.md`
+- [ ] T167 Añadir al CI un paso de avisos de vulnerabilidades de WordPress para WooCommerce, Wompi, Wordfence y LiteSpeed (Wordfence Intelligence, Patchstack o WPScan): `composer audit` no cubre wpackagist; y verificar el SHA-256 de los zips de wpackagist antes de copiar en `.github/workflows/ecommerce-ci.yml` y `ops/inventory.md`
 - [ ] T021 Crear las migraciones versionadas de las 6 tablas `aralia_*` con sus índices únicos (data-model §4) en `core/migrations/`
 - [ ] T022 [P] Escribir la prueba de migraciones e índices únicos en `tests/php/integration/MigrationsTest.php`
 - [ ] T023 Configurar WooCommerce con el comando `wp aralia setup`: COP, `woocommerce_price_num_decimals = 0`, stock gestionado, `woocommerce_hold_stock_minutes = 30`, HPOS con sincronización, checkout de bloques, compra como invitada, registro solo con rol cliente. En `core/src/Cli/SetupCommand.php`
@@ -376,7 +378,7 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
 - [ ] T157 Cargar las llaves de producción y la URL de eventos de producción, hacer una compra real pequeña y un retiro a la cuenta bancaria (RF-51), retirar las llaves de Sandbox y borrar pedidos, usuarios y datos de prueba (6.5.6); repetir T069 con los medios reales
 - [ ] T158 [P] Publicar `/.well-known/security.txt` en `theme/` o en la regla de reescritura de `core/src/Security/SecurityTxt.php`
 - [ ] T159 Completar el cuestionario SAQ A v4.0.1 y la atestación de cumplimiento del comercio (criterios de elegibilidad E1–E7 y requisitos aplicables, con referencia a la evidencia de `ops/compliance/`) en `ops/compliance/saq-a.md`
-- [ ] T160 Completar `ops/go-live-checklist.md` (13.1 del documento fuente + 6.5.6 + AOC + ASV + evidencia y cuestionario SAQ A) y conseguir la **firma de Sara** (sign-off T0)
+- [ ] T160 Completar `ops/go-live-checklist.md` (incluye las condiciones de T166; 13.1 del documento fuente + 6.5.6 + AOC + ASV + evidencia y cuestionario SAQ A) y conseguir la **firma de Sara** (sign-off T0)
 - [ ] T161 Cambiar la bio de redes de "Pronto, compra en línea" a "Compra en línea" el día de la apertura (documento fuente 1.3, frase de marca; spec FR-084)
 
 ---
@@ -445,6 +447,6 @@ Cuenta Wompi aprobada y AOC (T015), confirmación de Wompi sobre SAQ A (T071), a
 
 ## Notes
 
-- Total: **165 tareas**: Setup 19, Fundacional 58, US1 25, US2 11, US3 8, US4 4, US5 4, US6 3, US7 15, US8 4, Pulido 14.
+- Total: **167 tareas**: Setup 19, Fundacional 60, US1 25, US2 11, US3 8, US4 4, US5 4, US6 3, US7 15, US8 4, Pulido 14.
 - Las bajas de la revisión de la iteración 3 quedaron así: L-01 en T056 y T068; L-02 en T065 y T069; L-03 en T029; L-06 en T045; L-07 en T134. L-04, L-05 y L-08 ya se corrigieron en los artefactos.
 - Commit al cerrar cada tarea o grupo lógico; ninguna tarea del camino de pago se mezcla en el mismo commit con cambios de otra área.

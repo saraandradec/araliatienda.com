@@ -31,7 +31,7 @@ Actualizar en cada cambio de versión. Criterios para aceptar un plugin o librer
 | phpunit/phpunit + yoast/phpunit-polyfills | 9.6.39 / 2.0.2 | Pruebas PHP |
 | gitleaks | 8.30.1 (descarga verificada con SHA-256 en el CI) | Secretos en CI |
 
-Otros: `roots/wordpress-core-installer` 1.100.0 (instala WP en `wp/`); `composer audit` limpio al 2026-11-13.
+Otros: `roots/wordpress-core-installer` 1.100.0 (instala WP en `wp/`); `composer audit` limpio al 2026-11-13 **solo para paquetes de Packagist**: no cubre las vulnerabilidades de WooCommerce, Wompi, Wordfence ni LiteSpeed (wpackagist); riesgo aceptado hasta T167. Los zips de wpackagist no traen `shasum` en `composer.lock`: se verifican con `wp plugin verify-checksums` después de copiar (T167 añade verificación previa).
 
 **Avisos de `npm audit` aceptados (solo desarrollo)**: 13 avisos de severidad alta, todos en dependencias transitivas de `@wordpress/scripts`, `@wordpress/env` y `@lhci/cli`. Ninguna va a producción (no se despliega `node_modules/`). Mitigación: Dependabot semanal (`.github/dependabot.yml`) y revisión en cada actualización; si alguno afecta al CI (que ejecuta código del repositorio), subir el paquete o fijar `overrides`. Revisar de nuevo el 2026-12-13.
 
