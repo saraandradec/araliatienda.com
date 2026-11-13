@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/wp-env.json",
+  "core": "WordPress/WordPress#7.1.4",
+  "phpVersion": "8.3",
+  "plugins": [
+    "./wp-content/plugins/woocommerce",
+    "./wp-content/plugins/wompi-portal-de-pagos",
+    "./wp-content/plugins/wordfence"
+  ],
+  "themes": [],
+  "mappings": {
+    "wp-content/mu-plugins": "./wp-content/mu-plugins",
+    "wp-content/aralia-private": "./.wp-env-private"
+  },
+  "config": {
+    "ARALIA_ENV": "local",
+    "ARALIA_SECRETS_PATH": "/var/www/html/wp-content/aralia-private/aralia-secrets.php",
+    "WP_DEBUG": true,
+    "WP_DEBUG_LOG": true,
+    "WP_DEBUG_DISPLAY": false,
+    "SCRIPT_DEBUG": true,
+    "DISABLE_WP_CRON": false
+  },
+  "env": {
+    "tests": {
+      "mappings": {
+        "wp-content/aralia-repo": "."
+      },
+      "config": {
+        "ARALIA_ENV": "test",
+        "WP_DEBUG_DISPLAY": false
+      }
+    }
+  }
+}

@@ -9,15 +9,17 @@ cd "Documents/Aralía-web/E-commerce"
 composer install          # WP core, WooCommerce, Wompi 3.2.1, plugins fijados
 npm ci
 
-# 2. Secretos de Sandbox (archivo ignorado por git)
-cp ops/templates/aralia-secrets.sample.php .wp-env/aralia-secrets.php
+# 2. Secretos de Sandbox (carpeta ignorada por git; wp-env la monta en wp-content/aralia-private/)
+mkdir -p .wp-env-private && cp ops/templates/aralia-secrets.sample.php .wp-env-private/aralia-secrets.php
 #   → completar ARALIA_WOMPI_*_TEST, TURNSTILE_* de prueba, BREVO_* de prueba
 
 # 3. Entorno
 npx wp-env start          # http://localhost:8888 (admin en /wp-admin)
 npx wp-env run cli wp aralia setup --sample-catalog   # taxonomías, atributos, catálogo de ejemplo
 
-# 4. Eventos de Wompi en local
+# 4. Eventos de Wompi (ver ops/baseline-config.md §4)
+#   Los E2E con eventos reales corren en STAGING, con la URL de eventos de Wompi Sandbox apuntando a staging.
+#   En local y CI se usan eventos firmados con el secreto de prueba y avance de reloj de Action Scheduler.
 #   Wompi no alcanza localhost: usar un túnel (cloudflared) y registrar la URL de eventos de Sandbox,
 #   o reproducir eventos firmados:
 npx wp-env run cli wp aralia wompi replay tests/fixtures/wompi/approved.json
@@ -38,4 +40,6 @@ npx lhci autorun          # Lighthouse
 6. Rechazo en Sandbox → "Intentar con otro medio" → nueva referencia `<id>-2` (T-PAY-RETRY).
 7. Dejar vencer un pedido → "Volver a mi carrito" (T-CART-BACK).
 
-**Staging / producción**: despliegue por GitHub Actions (`deploy.yml`); producción requiere aprobación de Sara. Ver `ops/runbooks/`.
+**Staging / producción**: despliegue **local** con `ops/deploy.sh staging|production <sha>` desde el equipo de Sara (no por GitHub Actions; ver research R-15). Requiere `brew install rsync gh`, `ops/deploy.conf` y un CI en verde sobre `main`. Procedimiento completo en `ops/runbooks/deploy.md`.
+
+**Nota Docker (macOS/arm64)**: si `npx wp-env start` falla en `apt-get install git` con `chgrp: invalid group '_ssh'`, ver `ops/inventory.md` (Entorno local).

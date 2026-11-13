@@ -1,1 +1,72 @@
+# Sistema
 .DS_Store
+Thumbs.db
+*.swp
+*.tmp
+*~
+.idea/
+.vscode/
+
+# Dependencias y builds (en cualquier nivel)
+**/vendor/
+**/node_modules/
+/wp/
+build/
+dist/
+coverage/
+/release/
+*.log
+
+# Entorno local y pruebas
+.wp-env/
+.wp-env-private/
+.wp-env.override.json
+.env
+.env.*
+.phpunit.cache/
+/test-results/
+/playwright-report/
+/.lighthouseci/
+playwright/.auth/
+
+# Secretos y credenciales: NUNCA en el repo (research R-16)
+aralia-secrets*.php
+!/ops/templates/aralia-secrets.sample.php
+wp-config.php
+wp-config-*.php
+auth.json
+.npmrc
+/ops/deploy.conf
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+*service-account*.json
+credentials*.json
+
+# Copias y volcados (pueden tener datos personales)
+*.sql
+*.sql.gz
+*.zip
+*.tar
+*.tar.gz
+*.wpress
+updraft/
+
+# WordPress: solo se versiona código propio (plan.md)
+/wp-content/*
+!/wp-content/themes/
+/wp-content/themes/*
+!/wp-content/themes/aralia/
+!/wp-content/plugins/
+/wp-content/plugins/*
+!/wp-content/plugins/aralia-core/
+!/wp-content/mu-plugins/
+/wp-content/mu-plugins/*
+!/wp-content/mu-plugins/.gitkeep
+!/wp-content/mu-plugins/aralia-*
+# ...pero nunca un archivo de secretos dentro de mu-plugins (solo el cargador)
+/wp-content/mu-plugins/aralia-secrets*.php
+!/wp-content/mu-plugins/aralia-secrets-loader.php

@@ -1,0 +1,86 @@
+title = "Aralía — detección de secretos (research R-16, SC-015)"
+
+# gitleaks >= 8.25 (CI usa 8.30.1). Las excepciones son por CONTENIDO (marcadores xxxx), nunca por ruta:
+# una llave real pegada en la plantilla o en un fixture se detecta igual.
+# Bordes: (?:^|[^A-Za-z0-9]) en lugar de \b, porque "_" es carácter de palabra y \b no detectaría WOMPI_prv_prod_...
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "wompi-private-key"
+description = "Llave privada de Wompi"
+regex = '''(?:^|[^A-Za-z0-9])(prv_(?:test|prod)_[A-Za-z0-9]{16,})(?:[^A-Za-z0-9]|$)'''
+secretGroup = 1
+keywords = ["prv_"]
+tags = ["wompi", "R"]
+
+[[rules]]
+id = "wompi-events-secret"
+description = "Secreto de eventos de Wompi"
+regex = '''(?:^|[^A-Za-z0-9])((?:test|prod)_events_[A-Za-z0-9]{16,})(?:[^A-Za-z0-9]|$)'''
+secretGroup = 1
+keywords = ["_events_"]
+tags = ["wompi", "R"]
+
+[[rules]]
+id = "wompi-integrity-secret"
+description = "Secreto de integridad de Wompi"
+regex = '''(?:^|[^A-Za-z0-9])((?:test|prod)_integrity_[A-Za-z0-9]{16,})(?:[^A-Za-z0-9]|$)'''
+secretGroup = 1
+keywords = ["_integrity_"]
+tags = ["wompi", "R"]
+
+# La llave pública no es secreta, pero no debe versionarse (T007): delata el comercio y facilita el fraude de referencia.
+[[rules]]
+id = "wompi-public-key"
+description = "Llave pública de Wompi (no se versiona)"
+regex = '''(?:^|[^A-Za-z0-9])(pub_(?:test|prod)_[A-Za-z0-9]{16,})(?:[^A-Za-z0-9]|$)'''
+secretGroup = 1
+keywords = ["pub_"]
+tags = ["wompi", "P"]
+
+[[rules]]
+id = "aralia-secret-constant"
+description = "Constante de secreto de Aralía con valor"
+regex = '''define\(\s*['"](ARALIA_[A-Z0-9_]*(?:KEY|SECRET|TOKEN|PRV|EVENTS|INTEGRITY|JSON))['"]\s*,\s*['"]([^'"]{8,})['"]'''
+secretGroup = 2
+keywords = ["aralia_"]
+tags = ["aralia", "R"]
+
+[[rules]]
+id = "google-service-account"
+description = "JSON de cuenta de servicio de Google (GA4 Data API)"
+regex = '''"type"\s*:\s*"service_account"'''
+keywords = ["service_account"]
+tags = ["google", "R"]
+
+[[rules]]
+id = "brevo-api-key"
+description = "Llave de API de Brevo"
+regex = '''(?:^|[^A-Za-z0-9])(xkeysib-[a-f0-9]{64}-[A-Za-z0-9]{16})(?:[^A-Za-z0-9]|$)'''
+secretGroup = 1
+keywords = ["xkeysib-"]
+tags = ["brevo", "R"]
+
+[[rules]]
+id = "turnstile-secret"
+description = "Secreto de Cloudflare Turnstile"
+regex = '''(?:^|[^A-Za-z0-9])(0x4AAAAAAA[A-Za-z0-9_-]{20,})(?:[^A-Za-z0-9_-]|$)'''
+secretGroup = 1
+keywords = ["0x4aaaaaaa"]
+tags = ["turnstile", "R"]
+
+[[rules]]
+id = "meta-capi-token"
+description = "Token de acceso de Meta (Conversions API)"
+regex = '''(?:^|[^A-Za-z0-9])(EAA[A-Za-z0-9]{100,})(?:[^A-Za-z0-9]|$)'''
+secretGroup = 1
+keywords = ["eaa"]
+tags = ["meta", "R"]
+
+# Única excepción global: valores de ejemplo hechos solo de x (plantilla y fixtures).
+[[allowlists]]
+description = "Marcadores de ejemplo (xxxx...)"
+regexTarget = "secret"
+regexes = ['''^(?:(?:prv|pub)_(?:test|prod)_|(?:test|prod)_(?:events|integrity)_)?x{8,}$''']

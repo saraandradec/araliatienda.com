@@ -14,7 +14,7 @@ Tienda WooCommerce de producto propio, móvil primero, que **propone** looks com
 
 **Language/Version**: PHP 8.3 (mínimo 8.2 por el plugin de Wompi) · JavaScript ES2022 (Interactivity API; `@wordpress/scripts` para bloques) · CSS con `theme.json`
 
-**Primary Dependencies**: WordPress 6.9.x · WooCommerce 11.2.x (HPOS, checkout de bloques, Store API + ExtendSchema, Product Collection/Filters, Additional Checkout Fields API, Action Scheduler) · Wompi Portal de Pagos **3.2.1 fijado** · Wordfence · LiteSpeed Cache · UpdraftPlus Premium · GSAP (auto-alojado) · Cloudflare Turnstile (integración propia) · Brevo API · GA4 (gtag + Measurement Protocol + Data API de solo lectura) · Meta Pixel + Conversions API · libsodium (PHP)
+**Primary Dependencies**: WordPress 7.1.x · WooCommerce 11.2.x (HPOS, checkout de bloques, Store API + ExtendSchema, Product Collection/Filters, Additional Checkout Fields API, Action Scheduler) · Wompi Portal de Pagos **3.2.1 fijado** · Wordfence · LiteSpeed Cache · UpdraftPlus Premium · GSAP (auto-alojado) · Cloudflare Turnstile (integración propia) · Brevo API · GA4 (gtag + Measurement Protocol + Data API de solo lectura) · Meta Pixel + Conversions API · libsodium (PHP)
 
 **Storage**: MySQL/MariaDB de Hostinger: WordPress/WooCommerce con HPOS autoritativo + **6 tablas propias** `aralia_*` ([data-model.md](./data-model.md) §4). Medios en `uploads/` (sin ejecución de PHP) servidos por CDN. Secretos y llave de cifrado de datos personales en `aralia-secrets.php` fuera de `public_html` (R-16).
 
@@ -34,7 +34,7 @@ Tienda WooCommerce de producto propio, móvil primero, que **propone** looks com
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-La constitución del repo no está ratificada (plantilla). Se aplica la **constitución provisional** (R-20); su ratificación es la primera tarea de la fase 1. Un ✅ aquí significa "el diseño lo cubre"; las verificaciones que dependen de pruebas en Sandbox se listan como puertas de fase, no como supuestos.
+La constitución del repo fue **ratificada v1.0.0 el 2026-11-13** y **enmendada a v1.1.0** el mismo día (despliegue local por plan Free de GitHub; régimen transitorio de la revisora; ver §Registro de iteraciones, iteración 4). La constitución provisional C1–C8 / T0-1…T0-5 (R-20) coincide con I–X. Un ✅ aquí significa "el diseño lo cubre"; las verificaciones que dependen de pruebas en Sandbox se listan como puertas de fase, no como supuestos.
 
 | # | Principio / regla | Cómo lo cumple el plan | Post-diseño (iter. 2) |
 |---|-------------------|------------------------|-----------------------|
@@ -75,7 +75,8 @@ specs/001-aralia-store-p0/
 E-commerce/
 ├── composer.json · package.json · .wp-env.json
 ├── phpcs.xml.dist · phpstan.neon · .gitleaks.toml · .gitignore
-├── .github/workflows/ci.yml · deploy.yml
+├── ops/deploy.sh                    # despliegue local (R-15, enmienda 1.1.0)
+├── (raíz del repo) .github/workflows/ecommerce-ci.yml · CODEOWNERS · dependabot.yml
 ├── wp-content/
 │   ├── themes/aralia/                # theme.json (tokens claro/oscuro), templates, parts, patterns, fonts, assets/js (GSAP, availability), emails
 │   ├── plugins/aralia-core/
@@ -152,6 +153,13 @@ E-commerce/
 
 ## Registro de iteraciones
 
+### Iteración 4 — implementación de la Fase 1 y enmienda 1.1.0 (2026-11-13)
+
+| Hallazgo | Resolución | Artefacto |
+|----------|-----------|-----------|
+| GitHub Free no ofrece environments protegidos ni protección de rama en repos privados | Despliegue **local** `ops/deploy.sh`; la llave SSH no vive en GitHub; el CI solo arma el paquete | Constitución 1.1.0, R-15, T009 |
+| Gates T0 de la Fase 1 (security, code-reviewer, architect + 6 verificaciones adversariales) | Criterio invertido: todo commit desde el último despliegue exige PR aprobado (salvo documentación exenta); lista de revisoras leída del último despliegue; registro de despliegues local; el paquete se compara con `git archive`; CI sin suites omitidas en silencio; cargador de secretos falla cerrado | `ops/deploy.sh`, `ecommerce-ci.yml`, `aralia-secrets-loader.php`, `tests/ops/deploy_test.sh` |
+
 ### Iteración 2 — respuesta a la revisión de arquitectura (iteración 1)
 
 | Hallazgo | Resolución | Artefacto |
@@ -227,8 +235,9 @@ E-commerce/
 | N-09 saneamiento y clasificación | Lista blanca de campos del evento; nuevos datos clasificados; `client_id`/`fbp` solo con consentimiento | contracts/wompi §3, data-classification, R-14 |
 | N-10 compliance desactualizado | Filas corregidas + §7 "Estado tras el plan" | compliance-mapping |
 | N-11 centinela | Pedido centinela mensual en producción, aislado | R-11, runbook sentinel |
-| N-12 revisión humana después de abrir | Decidido por Sara: revisión humana obligatoria en cada cambio del camino de pago (CODEOWNERS) | R-15 |
+| N-12 revisión humana después de abrir | Decidido por Sara: revisión humana obligatoria en cada cambio del camino de pago (CODEOWNERS; con plan Free lo hace cumplir `ops/deploy.sh`) | R-15 |
 | B-01, B-02 | Texto del spec alineado (AC 1.4, borde de pasarela caída, FR-060) | spec |
+| `ops/deploy.sh` (~400 líneas propias) | GitHub Free no protege environments ni ramas; una llave SSH en GitHub quedaría al alcance de cualquier rama (R-15, enmienda 1.1.0) | Actions + environment de producción: no existe en el plan Free. GitHub Team/Pro lo resolvería: se reevalúa al contratar a la revisora |
 | B-03 | `n` en cada apertura, 1–999, tope de 30 aperturas | R-10, contracts/wompi §3 |
 | B-04 | id persistido aunque esté `deferred`; idempotencia por estado verificado | R-02 §2b, contracts/wompi §3 |
 | B-05 | APPROVED sobre `cancelled` de más de 24 h: misma ruta con alerta | R-02 §3, data-model §3 |

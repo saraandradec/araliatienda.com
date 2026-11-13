@@ -1,0 +1,45 @@
+# Revisión del camino de pago (constitución IX, enmienda 1.1.0; research R-15).
+#
+# RÉGIMEN TRANSITORIO: @saraandradec es la única dueña mientras se contrata a la revisora técnica humana.
+# Con el plan Free de GitHub este archivo NO bloquea merges (sin protección de rama en repos privados):
+# lo hace cumplir ops/deploy.sh, que no despliega a producción ningún commit (salvo documentación exenta) sin un PR
+# aprobado por una persona de la lista de ops/payment-reviewers.txt del último despliegue, distinta de la autora.
+# Hoy esa lista está vacía, así que producción queda bloqueada hasta que la revisora revise lo hecho.
+#
+# Al contratarla: agregar su usuario en las líneas marcadas [PAGO] y en ops/payment-reviewers.txt.
+# GitHub exige que tenga permiso Write en el repo para figurar aquí (ops/runbooks/access.md).
+# La última coincidencia gana: las reglas generales van arriba y las específicas abajo.
+
+*                                                                   @saraandradec
+
+# [PAGO] Camino de pago (R-15)
+/E-commerce/wp-content/mu-plugins/                                  @saraandradec
+/E-commerce/wp-content/plugins/aralia-core/src/Orders/              @saraandradec
+/E-commerce/wp-content/plugins/aralia-core/src/Checkout/            @saraandradec
+/E-commerce/wp-content/plugins/aralia-core/src/Cart/                @saraandradec
+/E-commerce/wp-content/plugins/aralia-core/src/Rest/                @saraandradec
+/E-commerce/wp-content/plugins/aralia-core/src/Security/            @saraandradec
+/E-commerce/wp-content/plugins/aralia-core/src/Cli/                 @saraandradec
+/E-commerce/wp-content/plugins/aralia-core/migrations/              @saraandradec
+/E-commerce/wp-content/themes/aralia/                               @saraandradec
+/E-commerce/tests/                                                  @saraandradec
+
+# [PAGO] Cadena de suministro, secretos y controles del CI
+/E-commerce/composer.json                                           @saraandradec
+/E-commerce/composer.lock                                           @saraandradec
+/E-commerce/package.json                                            @saraandradec
+/E-commerce/package-lock.json                                       @saraandradec
+/E-commerce/.wp-env.json                                            @saraandradec
+/E-commerce/.gitignore                                              @saraandradec
+/E-commerce/.gitleaks.toml                                          @saraandradec
+/E-commerce/phpcs.xml.dist                                          @saraandradec
+/E-commerce/phpstan.neon                                            @saraandradec
+/E-commerce/phpunit.xml.dist                                        @saraandradec
+/E-commerce/ops/templates/                                          @saraandradec
+/E-commerce/ops/deploy.sh                                           @saraandradec
+/E-commerce/ops/payment-reviewers.txt                               @saraandradec
+/E-commerce/ops/baseline-config.md                                  @saraandradec
+/E-commerce/tools/                                                  @saraandradec
+
+# [PAGO] Este archivo y los workflows (al final: ganan sobre todo lo anterior)
+/.github/                                                           @saraandradec

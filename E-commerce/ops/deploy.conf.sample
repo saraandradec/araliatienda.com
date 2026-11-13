@@ -1,0 +1,21 @@
+# Copiar como ops/deploy.conf (ignorado por git). No contiene secretos: la llave SSH vive en ~/.ssh y ssh-agent.
+#
+# En ~/.ssh/config de Sara (Hostinger usa un puerto distinto de 22; confirmarlo en hPanel → SSH):
+#   Host aralia-prod
+#     HostName <ip o host de Hostinger>
+#     Port 65002
+#     User u123456789
+#     IdentityFile ~/.ssh/aralia_deploy_ed25519
+#     IdentitiesOnly yes
+#     StrictHostKeyChecking yes
+#   (staging suele ser la misma cuenta: mismo Host o un alias aralia-staging con el mismo bloque)
+
+REPO="saraandradec/araliatienda.com"
+
+# IMPORTANTE: usa una cuenta/usuario de Hostinger DISTINTA para staging (con su propia llave). El código de staging
+# se despliega sin la revisión de producción; en la misma cuenta podría leer los secretos y la base de datos de producción.
+STAGING_SSH="aralia-staging"
+STAGING_PATH="/home/u987654321/domains/staging.araliatienda.com/public_html"
+
+PRODUCTION_SSH="aralia-prod"
+PRODUCTION_PATH="/home/u123456789/domains/araliatienda.com/public_html"

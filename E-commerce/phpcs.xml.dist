@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<ruleset name="Aralia">
+	<description>Estándar de código de Aralía (WordPress-Extra + seguridad + compatibilidad PHP 8.2+).</description>
+
+	<file>wp-content/plugins/aralia-core</file>
+	<file>wp-content/mu-plugins</file>
+	<file>wp-content/themes/aralia</file>
+	<file>tools</file>
+
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/build/*</exclude-pattern>
+
+	<arg name="extensions" value="php"/>
+	<arg name="colors"/>
+	<arg value="sp"/>
+
+	<config name="minimum_wp_version" value="7.1"/>
+	<config name="testVersion" value="8.2-"/>
+
+	<rule ref="WordPress-Extra"/>
+	<rule ref="WordPress.Security"/>
+	<rule ref="WordPress.DB.PreparedSQL"/>
+	<rule ref="WordPress.DB.PreparedSQLPlaceholders"/>
+	<rule ref="PHPCompatibilityWP"/>
+
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="aralia"/>
+			</property>
+		</properties>
+	</rule>
+
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="aralia"/>
+				<element value="Aralia"/>
+				<element value="ARALIA"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!-- Clases con PSR-4 (Aralia\...) en lugar de class-*.php -->
+	<rule ref="WordPress.Files.FileName">
+		<exclude-pattern>wp-content/plugins/aralia-core/src/*</exclude-pattern>
+		<exclude-pattern>wp-content/mu-plugins/aralia-wompi-guard/*</exclude-pattern>
+	</rule>
+</ruleset>
