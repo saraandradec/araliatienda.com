@@ -360,15 +360,15 @@ PLIST_OK=$'name,status,version,auto_update\nwoocommerce,active,11.2.1,on\nwompi-
 FS_PLUGINS_OK=$'index.php\nwoocommerce\nwompi-portal-de-pagos\nwordfence\nupdraftplus\naralia-core'
 FS_THEMES_OK=$'index.php\ntwentytwentysix\naralia'
 FS_MU_OK=$'index.php\nhostinger-tools.php\naralia-wompi-guard'
-FS_WPC_OK=$'index.php\nadvanced-cache.php\nobject-cache.php.bak'
+FS_WPC_OK=$'index.php\nadvanced-cache.php\nplugins\nthemes\nuploads\nlanguages'
 CT_CORE="7.1.4"; CT_PLIST="$PLIST_OK"; CT_WARN=""
 CT_FS_PLUGINS="$FS_PLUGINS_OK"; CT_FS_THEMES="$FS_THEMES_OK"; CT_FS_MU="$FS_MU_OK"; CT_FS_WPC="$FS_WPC_OK"
 on_target() {
 	case "$2" in
-		*"ls -A '/p/wp-content/plugins'"*)    printf '%s\n' "$CT_FS_PLUGINS" ;;
-		*"ls -A '/p/wp-content/themes'"*)     printf '%s\n' "$CT_FS_THEMES" ;;
-		*"ls -A '/p/wp-content/mu-plugins'"*) printf '%s\n' "$CT_FS_MU" ;;
-		*"ls -A '/p/wp-content'"*)            printf '%s\n' "$CT_FS_WPC" ;;
+		*"cd '/p/wp-content/plugins'"*)    printf '%s\n' "$CT_FS_PLUGINS" ;;
+		*"cd '/p/wp-content/themes'"*)     printf '%s\n' "$CT_FS_THEMES" ;;
+		*"cd '/p/wp-content/mu-plugins'"*) printf '%s\n' "$CT_FS_MU" ;;
+		*"cd '/p/wp-content' "*)           printf '%s\n' "$CT_FS_WPC" ;;
 		*"wp core verify-checksums"*)   echo "${CT_WARN}Success: WordPress installation verifies against checksums." ;;
 		*"wp core version"*)            echo "$CT_CORE" ;;
 		*"wp plugin verify-checksums"*) echo "${CT_WARN}Success: Verified 4 of 4 plugins." ;;
@@ -382,7 +382,9 @@ ct_deny() { if ct; then fail "$1 (debía bloquear)"; else pass "$1"; fi; }
 ct_pass "terceros conformes con el manifiesto: pasa"
 H1="$(tail -1 "$T/ct.out")"
 CT_PLIST="${PLIST_OK/1.25.1/1.30.0}"; ct_pass "plugin con versión 'any' puede cambiar de versión"
-[ "$(tail -1 "$T/ct.out")" != "$H1" ] && pass "la huella de terceros cambia cuando cambia una versión" || fail "la huella de terceros cambia cuando cambia una versión"
+[ "$(tail -1 "$T/ct.out")" = "$H1" ] && pass "actualizar UpdraftPlus ('any' en el lock) no cambia la huella" || fail "actualizar UpdraftPlus no debe cambiar la huella"
+CT_FS_THEMES="$FS_THEMES_OK"; CT_CORE="7.1.9"; ct_pass "núcleo 7.1.9 con 7.1.*"; [ "$(tail -1 "$T/ct.out")" = "$H1" ] && pass "una menor automática de WordPress ('7.1.*' en el lock) no cambia la huella" || fail "una menor de WordPress no debe cambiar la huella"; CT_CORE="7.1.4"
+CT_FS_MU="$FS_MU_OK"$'\n'; ct_pass "sin cambios"; H2="$(tail -1 "$T/ct.out")"; [ "$H2" = "$H1" ] && pass "misma instalación, misma huella" || fail "misma instalación, misma huella"
 CT_PLIST="${PLIST_OK/11.2.1/11.3.0}"; ct_deny "WooCommerce con otra versión: bloquea"
 CT_PLIST="$PLIST_OK"$'\nevil-plugin,active,1.0,off'; ct_deny "plugin no inventariado: bloquea"
 CT_PLIST="${PLIST_OK/3.2.1,off/3.2.1,on}"; ct_deny "Wompi con actualización automática activada: bloquea"
@@ -396,6 +398,10 @@ CT_FS_PLUGINS="$FS_PLUGINS_OK"; CT_FS_THEMES="$FS_THEMES_OK"$'\nevil-theme'; ct_
 CT_FS_THEMES="$FS_THEMES_OK"; CT_FS_MU="$FS_MU_OK"$'\nrogue.php'; ct_deny "mu-plugin ajeno en disco, aunque WP-CLI no lo liste: bloquea"
 CT_FS_MU="$FS_MU_OK"$'\naralia-x.php'; ct_pass "mu-plugin aralia-* en disco no necesita estar en el manifiesto"
 CT_FS_MU="$FS_MU_OK"; CT_FS_WPC="$FS_WPC_OK"$'\ndb.php'; ct_deny "drop-in db.php no inventariado: bloquea"
+for bad in shell.PHP x.phtml x.php.jpg object-cache.php.bak '@@BAD@@'; do CT_FS_WPC="$FS_WPC_OK"$'\n'"$bad"; ct_deny "archivo ejecutable/raro en wp-content ($bad): bloquea"; done
+CT_FS_WPC="$FS_WPC_OK"; CT_FS_PLUGINS="${FS_PLUGINS_OK/wordfence/}"; ct_deny "falta la carpeta de Wordfence en disco: bloquea"
+CT_FS_PLUGINS="$FS_PLUGINS_OK"$'\nwoocommerc.'; ct_deny "carpeta 'woocommerc.' no se confunde con woocommerce (comparación literal)"
+CT_FS_PLUGINS="$FS_PLUGINS_OK"
 CT_FS_WPC="$FS_WPC_OK"; CT_FS_PLUGINS="$FS_PLUGINS_OK"$'\nhello.php'; ct_deny "plugin de un solo archivo no inventariado: bloquea"
 CT_FS_PLUGINS="$FS_PLUGINS_OK"; CT_PLIST="${PLIST_OK/wordfence,active/wordfence,inactive}"; ct_deny "Wordfence desactivado: bloquea"
 CT_PLIST="${PLIST_OK/wordfence,active,9.0.2,off/}"; ct_deny "Wordfence ausente: bloquea"
@@ -407,6 +413,37 @@ on_target() {
 	local host="$1"; shift
 	if [ -z "$host" ]; then bash -c "$*"; else ssh $SSH_OPTS "$host" "$*"; fi
 }
+echo "inventory_fs / list_dir con un directorio real (sin stubs)"
+IV="$T/invsite"; MANI=$'core 7.1.*\nplugin woocommerce 11.2.1\nplugin wompi-portal-de-pagos 3.2.1\nplugin wordfence 9.0.2\ntheme twentytwentysix\nmu hostinger-tools\ndropin advanced-cache'
+mkiv() { rm -rf "$IV"; mkdir -p "$IV/wp-content/plugins/woocommerce" "$IV/wp-content/plugins/wompi-portal-de-pagos" "$IV/wp-content/plugins/wordfence" "$IV/wp-content/themes/twentytwentysix" "$IV/wp-content/mu-plugins" "$IV/wp-content/uploads"
+	echo '<?php // Silence is golden.' > "$IV/wp-content/index.php"; echo '<?php // Silence is golden.' > "$IV/wp-content/plugins/index.php"
+	echo x > "$IV/wp-content/mu-plugins/hostinger-tools.php"; echo x > "$IV/wp-content/advanced-cache.php"; }
+inv() { ( inventory_fs "" "$IV" "$MANI" ) >"$T/inv.out" 2>&1; }
+inv_pass() { mkiv; "$1"; if inv; then pass "$2"; else fail "$2 (debía pasar): $(tail -1 "$T/inv.out")"; fi; }
+inv_deny() { mkiv; "$1"; if inv; then fail "$2 (debía bloquear)"; else pass "$2"; fi; }
+v_none() { :; }
+v_nl_mu()   { : > "$IV/wp-content/mu-plugins/aralia-x"$'\n'"index.php"; }
+v_nl_host() { : > "$IV/wp-content/mu-plugins/hostinger-tools"$'\n'"hostinger-tools.php"; }
+v_dot()     { mkdir "$IV/wp-content/plugins/woocommerc."; }
+v_bigindex(){ head -c 200 /dev/zero | tr '\0' 'x' > "$IV/wp-content/plugins/index.php"; }
+v_upper()   { echo x > "$IV/wp-content/shell.PHP"; }
+v_bak()     { echo x > "$IV/wp-content/object-cache.php.bak"; }
+v_nomu()    { rm -rf "$IV/wp-content/mu-plugins"; rm -f "$IV/wp-content/advanced-cache.php"; }
+v_noplug()  { rm -rf "$IV/wp-content/plugins"; }
+v_aralia()  { echo x > "$IV/wp-content/mu-plugins/aralia-loader.php"; }
+inv_pass v_none    "inventario real: instalación conforme"
+inv_deny v_nl_mu   "nombre con salto de línea 'aralia-x⏎index.php' en mu-plugins: bloquea"
+inv_deny v_nl_host "nombre con salto de línea 'hostinger-tools⏎hostinger-tools.php': bloquea"
+inv_deny v_dot     "carpeta 'woocommerc.' (el punto no es comodín): bloquea"
+inv_deny v_bigindex "index.php de 200 bytes (posible webshell): bloquea"
+inv_deny v_upper   "wp-content/shell.PHP: bloquea"
+inv_deny v_bak     "wp-content/object-cache.php.bak: bloquea"
+inv_pass v_nomu    "mu-plugins ausente es válido (el despliegue lo crea)"
+inv_deny v_noplug  "carpeta plugins ausente: bloquea (no es un inventario vacío)"
+inv_pass v_aralia  "mu-plugin aralia-* en disco: se permite (es código propio)"
+# remove_orphans no se deja engañar por nombres con salto de línea: falla en vez de borrar un trozo
+mkiv; : > "$IV/wp-content/mu-plugins/aralia-x"$'\n'"index.php"; echo keep > "$IV/wp-config.php"
+if ( remove_orphans "$SRC" "" "$IV" ) >/dev/null 2>&1; then fail "remove_orphans con nombre raro debía fallar"; else pass "remove_orphans con nombre con salto de línea: falla cerrado"; fi
 case "$SSH_OPTS" in *ForwardAgent=no*ClearAllForwardings=yes*BatchMode=yes*) pass "ssh sin reenvío de agente ni preguntas interactivas";; *) fail "SSH_OPTS debe desactivar ForwardAgent";; esac
 
 # --- apply_release / last_deployed ---------------------------------------------------------------------
@@ -444,6 +481,8 @@ CT_CHANGE=1; apply verified "OK-CONFIRM" ok ok; CT_CHANGE=0
 [ "$(logn verified)" = 0 ] && pass "terceros que cambian durante el despliegue (huella distinta tras copiar): no registra" || fail "terceros que cambian durante el despliegue: no registra"
 NO_BASELINE=1; apply verified "OK-CONFIRM" ok ok; NO_BASELINE=0
 [ "$(logn verified)" = 0 ] && pass "producción sin 'wp aralia baseline check' (Fase 2): se niega antes de copiar" || fail "producción sin baseline: se niega antes de copiar"
+NO_BASELINE=1; APPLY_SEED="2026-01-01T00:00:00Z 3333333333333333333333333333333333333333 s verified launcher=x allow= tp=abc"; apply rollback "OK-CONFIRM" ok ok; APPLY_SEED=""; NO_BASELINE=0
+[ "$(logn ' rollback launcher=')" = 1 ] && pass "rollback no exige 'wp aralia baseline check' (el sitio puede estar roto)" || fail "rollback no exige 'wp aralia baseline check'"
 LASTV="3333333333333333333333333333333333333333"
 APPLY_SEED="2026-01-01T00:00:00Z $LASTV s verified launcher=x allow= tp=abc"; apply rollback "OK-CONFIRM" ok ok; APPLY_SEED=""
 [ "$(head -1 "$T/ct.args")" = "$LASTV" ] && pass "rollback: los terceros se comprueban contra el lock del último despliegue verificado, no el del SHA destino" || fail "rollback: lock del último despliegue verificado"

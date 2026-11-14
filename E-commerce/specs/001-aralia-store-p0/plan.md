@@ -274,4 +274,4 @@ E-commerce/
 | Vencimiento de pedidos propio | La cancelación nativa de WC no cumple FR-056 (R-06) | La reserva nativa vence sin consultar a Wompi |
 | Búsqueda propia | "corectol" → "corrector" (distancia 2) | Los plugins no la cubren sin un servicio externo |
 | 6 tablas propias | Idempotencia, consentimientos, auditoría, avisos y límites atómicos | Post meta no da unicidad ni atomicidad |
-| `ops/deploy.sh` (~650 líneas propias, con ~210 pruebas) | GitHub Free no protege environments ni ramas; una llave SSH en GitHub quedaría al alcance de cualquier rama (R-15, enmienda 1.1.0) | Actions + environment de producción: no existe en el plan Free. GitHub Pro/Team lo resolvería: es condición de la primera salida a producción (`deploy.sh` se niega sin protección de rama; T166) |
+| `ops/deploy.sh` (~780 líneas propias, con ~260 pruebas) | GitHub Free no protege environments ni ramas; una llave SSH en GitHub quedaría al alcance de cualquier rama (R-15, enmienda 1.1.0) | Actions + environment de producción: no existe en el plan Free. GitHub Pro/Team lo resolvería: es condición de la primera salida a producción (`deploy.sh` se niega sin protección de rama; T166) |

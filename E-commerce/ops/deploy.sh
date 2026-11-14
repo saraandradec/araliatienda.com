@@ -136,6 +136,15 @@ on_target() {
 	if [ -z "$host" ]; then bash -c "$*"; else ssh $SSH_OPTS "$host" "$*"; fi
 }
 
+# Un enlace simbólico en el destino (p. ej. plugins/aralia-core -> ../..) convertiría el --delete en un borrado de todo el sitio.
+# Se comprueba al empezar y otra vez justo antes de cada componente (la ventana que queda es RR-12).
+assert_no_links() {
+	local host="$1" path="$2" links
+	links="$(on_target "$host" "cd '$path' && for p in wp-content wp-content/plugins wp-content/themes wp-content/mu-plugins wp-content/plugins/aralia-core wp-content/themes/aralia; do [ -L \"\$p\" ] && echo \"\$p\"; done; find wp-content/mu-plugins -maxdepth 1 -name 'aralia-*' -type l 2>/dev/null; true")" || return 1
+	[ -z "$links" ] || die "Enlaces simbólicos en el destino (no se copia nada): $(echo "$links" | tr '\n' ' ')"
+	return 0
+}
+
 # Copia el paquete extraído ($1) a la raíz de WordPress del destino. $2 host ("" local), $3 ruta, $4 "-n" para simular.
 sync_release() {
 	local src="$1" host="$2" path="$3" dry="${4:-}" dest d n links
@@ -145,9 +154,7 @@ sync_release() {
 	require_rsync3
 
 	on_target "$host" "test -f '$path/wp-config.php'" || die "No hay wp-config.php en $path (¿ruta equivocada?)"
-	# Un enlace simbólico en el destino (p. ej. plugins/aralia-core -> ../..) convertiría el --delete en un borrado de todo el sitio.
-	links="$(on_target "$host" "cd '$path' && for p in wp-content wp-content/plugins wp-content/themes wp-content/mu-plugins wp-content/plugins/aralia-core wp-content/themes/aralia; do [ -L \"\$p\" ] && echo \"\$p\"; done; find wp-content/mu-plugins -maxdepth 1 -name 'aralia-*' -type l 2>/dev/null; true")" || return 1
-	[ -z "$links" ] || die "Enlaces simbólicos en el destino (no se copia nada): $(echo "$links" | tr '\n' ' ')"
+	assert_no_links "$host" "$path" || return 1
 	on_target "$host" "mkdir -p '$path/wp-content/plugins' '$path/wp-content/themes' '$path/wp-content/mu-plugins'" || return 1
 
 	# --checksum: compara contenido, no tamaño+hora (un archivo con igual tamaño y hora no se saltaría).
@@ -160,11 +167,13 @@ sync_release() {
 	for d in "$src"/wp-content/plugins/*/ "$src"/wp-content/themes/*/; do
 		[ -d "$d" ] || continue
 		n="${d#"$src"/}"
+		assert_no_links "$host" "$path" || return 1
 		"${R[@]}" --delete "$d" "$dest/$n" || return 1
 	done
 	for d in "$src"/wp-content/mu-plugins/aralia-*; do
 		[ -e "$d" ] || continue
 		n="wp-content/mu-plugins/$(basename "$d")"
+		assert_no_links "$host" "$path" || return 1
 		if [ -d "$d" ]; then "${R[@]}" --delete "$d/" "$dest/$n/" || return 1; else "${R[@]}" "$d" "$dest/$n" || return 1; fi
 	done
 	remove_orphans "$src" "$host" "$path" "$dry" || return 1
@@ -175,10 +184,11 @@ sync_release() {
 # se borra del destino: un mu-plugin viejo seguiría ejecutándose. Solo nombres aralia-* validados; con -n solo se lista.
 remove_orphans() {
 	local src="$1" host="$2" path="$3" dry="${4:-}" listing name rel
-	listing="$(on_target "$host" "ls -1 '$path/wp-content/mu-plugins' 2>/dev/null | grep '^aralia-' || true")" || return 1
+	listing="$(list_dir "$host" "$path/wp-content/mu-plugins" optional)" || die "No se pudo listar mu-plugins del servidor"
 	while IFS= read -r name; do
 		[ -n "$name" ] || continue
-		[[ "$name" =~ ^aralia-[A-Za-z0-9._-]+$ ]] || die "Nombre no permitido en mu-plugins del servidor: $name"
+		[[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || die "Nombre no permitido en mu-plugins del servidor: $name"
+		[[ "$name" == aralia-* ]] || continue
 		[ -e "$src/wp-content/mu-plugins/$name" ] && continue
 		orphan_delete "$host" "$path" "wp-content/mu-plugins/$name" "$dry" || return 1
 	done <<<"$listing"
@@ -537,56 +547,84 @@ sha256_stdin() { if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -
 TP_HASH=""
 THIRD_PARTY_REQUIRED=(woocommerce wompi-portal-de-pagos wordfence)   # deben estar instalados y activos
 
-# Entradas (archivos o carpetas) de un directorio del destino, sin PHP; un nombre por línea.
-list_dir() { on_target "$1" "ls -A '$2' 2>/dev/null || true"; }
+# Entradas de un directorio del destino, una por línea, sin PHP. Los nombres con caracteres fuera de [A-Za-z0-9._-]
+# (saltos de línea incluidos) y los index.php de más de 64 bytes salen como @@BAD@@, que el inventario rechaza.
+# $3 = required (el directorio debe existir) | optional. Un fallo de ssh o un directorio ausente devuelve error.
+list_dir() {
+	local miss=3
+	[ "${3:-required}" = optional ] && miss=0
+	on_target "$1" "cd '$2' 2>/dev/null || exit $miss; for f in * .[!.]* ..?*; do [ -e \"\$f\" ] || [ -L \"\$f\" ] || continue; case \"\$f\" in *[!A-Za-z0-9._-]*) echo '@@BAD@@'; continue;; esac; if [ \"\$f\" = index.php ] && [ \"\$(wc -c < \"\$f\")\" -gt 64 ]; then echo '@@BAD@@'; continue; fi; echo \"\$f\"; done"
+}
 
+# Extensiones que Apache/LiteSpeed pueden ejecutar (sin distinguir mayúsculas), también como doble extensión.
+exec_name() { [[ "$(printf '%s' "$1" | tr 'A-Z' 'a-z')" =~ \.(php[0-9]*|phtml|phar|pht|phps|inc|shtml|cgi|pl|py)([.]|$) ]]; }
+
+INV_NORM=""   # lo hallado por archivos (entra en la huella tp=)
 inventory_fs() {
-	local host="$1" path="$2" manifest="$3" e base kind dir
+	local host="$1" path="$2" manifest="$3" e kind dir out entries
+	INV_NORM=""
 	for kind in plugins themes mu-plugins; do
 		dir="$path/wp-content/$kind"
+		if [ "$kind" = mu-plugins ]; then out="$(list_dir "$host" "$dir" optional)" || die "No se pudo listar $kind del servidor"
+		else out="$(list_dir "$host" "$dir" required)" || die "No se pudo listar $kind del servidor (¿existe $dir?)"; fi
+		entries=" "
 		while IFS= read -r e; do
 			[ -n "$e" ] || continue
-			[[ "$e" =~ ^[A-Za-z0-9._-]+$ ]] || die "Nombre no permitido en $kind del servidor: $e"
-			base="${e%.php}"
+			[[ "$e" =~ ^[A-Za-z0-9._-]+$ ]] || die "Nombre no permitido en $kind del servidor (caracteres raros o index.php sospechoso): $e"
 			[ "$e" = index.php ] && continue
+			entries="$entries$e "
 			case "$kind" in
 				plugins)    [ "$e" = aralia-core ] && continue
-				            grep -Eq "^plugin $e " <<<"$manifest" || die "Plugin instalado no inventariado: $e (ops/third-party.lock)" ;;
+				            awk -v e="$e" '$1=="plugin" && $2==e { f=1 } END { exit !f }' <<<"$manifest" || die "Plugin instalado no inventariado: $e (ops/third-party.lock)"
+				            INV_NORM="${INV_NORM}plugindir $e"$'\n' ;;
 				themes)     [ "$e" = aralia ] && continue
-				            grep -qxF "theme $e" <<<"$manifest" || die "Tema instalado no inventariado: $e (ops/third-party.lock)" ;;
+				            grep -qxF "theme $e" <<<"$manifest" || die "Tema instalado no inventariado: $e (ops/third-party.lock)"
+				            INV_NORM="${INV_NORM}theme $e"$'\n' ;;
 				mu-plugins) [[ "$e" == aralia-* ]] && continue
-				            grep -qxF "mu $base" <<<"$manifest" || die "mu-plugin instalado no inventariado: $e (ops/third-party.lock)" ;;
+				            grep -qxF "mu ${e%.php}" <<<"$manifest" || die "mu-plugin instalado no inventariado: $e (ops/third-party.lock)"
+				            INV_NORM="${INV_NORM}mu ${e%.php}"$'\n' ;;
 			esac
-		done < <(list_dir "$host" "$dir")
+		done <<<"$out"
+		if [ "$kind" = plugins ]; then
+			for e in "${THIRD_PARTY_REQUIRED[@]}"; do
+				case "$entries" in *" $e "*) ;; *) die "Falta la carpeta del plugin $e en el servidor (debe estar instalado)" ;; esac
+			done
+		fi
 	done
+	out="$(list_dir "$host" "$path/wp-content" required)" || die "No se pudo listar wp-content del servidor"
 	while IFS= read -r e; do
 		[ -n "$e" ] || continue
-		[[ "$e" =~ ^[A-Za-z0-9._-]+$ ]] || die "Nombre no permitido en wp-content del servidor: $e"
+		[[ "$e" =~ ^[A-Za-z0-9._-]+$ ]] || die "Nombre no permitido en wp-content del servidor (caracteres raros o index.php sospechoso): $e"
 		[ "$e" = index.php ] && continue
+		exec_name "$e" || continue
+		# Un archivo ejecutable suelto en wp-content solo puede ser un drop-in con nombre exacto x.php (sin mayúsculas ni dobles extensiones).
+		[[ "$e" =~ ^[a-z0-9_-]+\.php$ ]] || die "Archivo ejecutable no permitido en wp-content: $e"
 		grep -qxF "dropin ${e%.php}" <<<"$manifest" || die "Drop-in instalado no inventariado: $e (ops/third-party.lock)"
-	done < <(list_dir "$host" "$path/wp-content" | grep '\.php$' || true)
+		INV_NORM="${INV_NORM}dropin ${e%.php}"$'\n'
+	done <<<"$out"
 }
 
 check_third_party() {
-	local sha="$1" host="$2" path="$3" manifest out core_v list norm name status ver au k v ok req seen=" "
+	local sha="$1" host="$2" path="$3" manifest out core_v list norm name status ver au k v ok req seen=" " core_norm="" vnorm
 	manifest="$(git -C "$REPO_ROOT" show "$sha:$PROJECT_REL/ops/third-party.lock" 2>/dev/null | sed 's/#.*//' | awk 'NF')" || true
 	[ -n "$manifest" ] || die "Falta ops/third-party.lock en $sha (lista cerrada de terceros y versiones)"
 	inventory_fs "$host" "$path" "$manifest"
 	out="$(on_target "$host" "cd '$path' && wp core verify-checksums --skip-plugins --skip-themes 2>&1")" || die "wp core verify-checksums falló: $out"
 	if grep -qi 'warning' <<<"$out"; then die "wp core verify-checksums con avisos: $out"; fi
 	core_v="$(on_target "$host" "cd '$path' && wp core version --skip-plugins --skip-themes")" || die "No se pudo leer la versión de WordPress"
+	[[ "$core_v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Versión de WordPress con formato inesperado: $core_v"
 	ok=no
 	while read -r k v; do
 		[ "$k" = core ] || continue
 		[[ "$v" =~ ^[0-9]+\.[0-9]+(\.[0-9]+|\.\*)$ ]] || die "ops/third-party.lock: versión de núcleo no válida: $v"
 		# shellcheck disable=SC2254  # $v es un patrón a propósito (validado arriba)
-		case "$core_v" in $v) ok=yes ;; esac
+		case "$core_v" in $v) ok=yes; core_norm="core $v" ;; esac
 	done <<<"$manifest"
 	[ "$ok" = yes ] || die "WordPress $core_v no coincide con ops/third-party.lock de $sha"
 	out="$(on_target "$host" "cd '$path' && wp plugin verify-checksums ${THIRD_PARTY_PLUGINS[*]} --skip-plugins --skip-themes 2>&1")" || die "wp plugin verify-checksums falló: $out"
 	if grep -qi 'warning' <<<"$out"; then die "wp plugin verify-checksums con avisos: $out"; fi
 	list="$(on_target "$host" "cd '$path' && wp plugin list --fields=name,status,version,auto_update --format=csv --skip-plugins --skip-themes")" || die "No se pudo listar los plugins"
-	norm="core $core_v"$'\n'
+	norm="${core_norm}"$'\n'
 	while IFS=, read -r name status ver au; do
 		{ [ -n "$name" ] && [ "$name" != name ]; } || continue
 		[[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || die "Nombre de plugin no permitido en el servidor: $name"
@@ -612,13 +650,15 @@ check_third_party() {
 						seen="${seen}${name} "
 					fi
 				done
-				norm="${norm}plugin $name $ver"$'\n' ;;
+				# La huella usa lo que el lock deja abierto (any), no el valor real: una actualización de UpdraftPlus no la rompe.
+				vnorm="$ver"; grep -qxF "plugin $name any" <<<"$manifest" && vnorm=any
+				norm="${norm}plugin $name $vnorm"$'\n' ;;
 		esac
 	done <<<"$list"
 	for req in "${THIRD_PARTY_REQUIRED[@]}"; do
 		case "$seen" in *" $req "*) ;; *) die "Falta el plugin $req (debe estar instalado y activo)" ;; esac
 	done
-	TP_HASH="$(printf '%s' "$norm" | sort | sha256_stdin)"
+	TP_HASH="$(printf '%s%s' "$norm" "$INV_NORM" | sort | sha256_stdin)"
 	info "Terceros del servidor conformes con ops/third-party.lock (huella ${TP_HASH:0:12})"
 }
 
@@ -654,7 +694,8 @@ apply_release() {
 	check_third_party "$lock_sha" "$host" "$path"
 	tp_before="$TP_HASH"
 	if [ "$target" = production ] && [ "$kind" = verified ]; then staging_tp_matches "$sha"; fi
-	if [ "$target" = production ]; then
+	# En un rollback no se exige: el sitio puede estar roto justo por el código que se quiere retirar.
+	if [ "$target" = production ] && [ "$kind" = verified ]; then
 		on_target "$host" "cd '$path' && wp cli has-command 'aralia baseline'" >/dev/null 2>&1 \
 			|| die "En producción falta 'wp aralia baseline check' (Fase 2, T032): no se despliega hasta que exista, para no copiar y fallar la verificación"
 	fi
