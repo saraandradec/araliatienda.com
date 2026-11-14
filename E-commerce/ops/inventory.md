@@ -8,7 +8,7 @@ Actualizar en cada cambio de versión. Criterios para aceptar un plugin o librer
 
 | Componente | Versión probada | Publicada | Fuente | Justificación | Notas |
 |------------|----------------|-----------|--------|---------------|-------|
-| WordPress | 7.1.4 | — | wordpress.org (la instala Hostinger; `roots/wordpress-no-content` solo para pruebas) | Plataforma decidida | 6.9.x y 7.0.x están marcadas sin soporte de seguridad en wordpress.org |
+| WordPress | 7.1.4 (serie 7.1.*) | — | wordpress.org (la instala Hostinger; `roots/wordpress-no-content` solo para pruebas) | Plataforma decidida | 6.9.x y 7.0.x están marcadas sin soporte de seguridad en wordpress.org |
 | WooCommerce | 11.2.1 | 2026-10-09 | wordpress.org | Tienda | Exige WP ≥ 7.0 |
 | Wompi Portal de Pagos | 3.2.1 | 2026-10-23 | wordpress.org (autor: Wompi) | Pasarela decidida | **Probado por su autor solo hasta WP 6.9.11.** La compatibilidad con 7.1 se verifica con la prueba de contrato y los E2E de la puerta T073. Blindado por `aralia-wompi-guard` (research R-01) |
 | Wordfence | 9.0.2 | 2026-09-30 | wordpress.org | WAF, 2FA, escáner, alertas de vulnerabilidades | |

@@ -83,6 +83,15 @@ expect_fail sync_release "$SRC" "" "$T/not-wordpress"       # sin wp-config.php:
 mkdir -p "$T/bad-src"
 expect_fail sync_release "$T/bad-src" "" "$DST"             # paquete sin wp-content/
 expect_no_file "$T/not-wordpress/wp-content" "no escribe en una ruta que no es WordPress"
+LNK="$T/linksite"; mkdir -p "$LNK/wp-content/plugins" "$LNK/wp-content/uploads"; echo keep > "$LNK/wp-config.php"; echo keep > "$LNK/wp-content/uploads/foto.jpg"
+ln -s ../.. "$LNK/wp-content/plugins/aralia-core"
+expect_fail sync_release "$SRC" "" "$LNK"
+expect_content "$LNK/wp-config.php" keep "enlace simbólico plugins/aralia-core -> ../..: no se borra el sitio"
+expect_content "$LNK/wp-content/uploads/foto.jpg" keep "enlace simbólico en el destino: uploads intacto"
+LNK2="$T/linksite2"; mkdir -p "$LNK2/wp-content/plugins" "$LNK2/wp-content/themes" "$LNK2/wp-content/mu-plugins"; echo keep > "$LNK2/wp-config.php"; ln -s "$LNK2" "$LNK2/wp-content/mu-plugins/aralia-wompi-guard"
+expect_fail sync_release "$SRC" "" "$LNK2" -n
+rm -rf "$LNK2/wp-content/plugins"; ln -s "$T" "$LNK2/wp-content/plugins"; rm -f "$LNK2/wp-content/mu-plugins/aralia-wompi-guard"
+expect_fail sync_release "$SRC" "" "$LNK2"
 
 echo "valid_sha"
 if valid_sha "0123456789abcdef0123456789abcdef01234567"; then pass "acepta SHA de 40"; else fail "acepta SHA de 40"; fi
@@ -190,7 +199,7 @@ echo '<?php // plugin' > "$V/E-commerce/wp-content/plugins/aralia-core/src/Plugi
 mkdir -p "$V/E-commerce/wp-content/plugins/aralia-core/blocks"; echo 'src' > "$V/E-commerce/wp-content/plugins/aralia-core/blocks/b.js"
 : > "$V/E-commerce/wp-content/plugins/aralia-core/src/.gitkeep"
 mkdir -p "$V/E-commerce/wp-content/mu-plugins/aralia-fx"; echo '<?php // fx' > "$V/E-commerce/wp-content/mu-plugins/aralia-fx/fx.php"; : > "$V/E-commerce/wp-content/mu-plugins/aralia-fx/.gitkeep"
-printf 'core 7.1.4\nplugin woocommerce 11.2.1\nplugin wompi-portal-de-pagos 3.2.1\nplugin updraftplus any\nmu hostinger-tools\ndropin advanced-cache.php\n' > "$V/E-commerce/ops/third-party.lock"
+printf 'core 7.1.*\nplugin woocommerce 11.2.1\nplugin wompi-portal-de-pagos 3.2.1\nplugin wordfence 9.0.2\nplugin updraftplus any\ntheme twentytwentysix\nmu hostinger-tools\ndropin advanced-cache\n' > "$V/E-commerce/ops/third-party.lock"
 printf '#!/usr/bin/env bash\necho launcher-v1\n' > "$V/E-commerce/ops/deploy.sh"
 git -C "$V" add -A && git -C "$V" commit -q -m v && VS="$(git -C "$V" rev-parse HEAD)"
 printf '#!/usr/bin/env bash\nif [ then\n' > "$V/E-commerce/ops/deploy.sh"
@@ -249,6 +258,20 @@ m_build_svg()   { mkdir wp-content/plugins/aralia-core/build; echo '<svg onload=
 m_asset_dbl()   { mkdir wp-content/plugins/aralia-core/build; printf '%s\n' "<?php return array('dependencies' => array(), 'version' => '1');" > wp-content/plugins/aralia-core/build/a.php.asset.php; }
 m_keep_data()   { echo '<?php evil();' > wp-content/plugins/aralia-core/src/.gitkeep; }
 m_keep_empty()  { : > wp-content/plugins/aralia-core/src/.gitkeep; }
+m_no_core()     { rm -rf wp-content/plugins/aralia-core; }
+m_no_theme()    { rm -rf wp-content/themes/aralia; }
+m_no_mu()       { rm -rf wp-content/mu-plugins/aralia-fx; }
+m_no_loader()   { rm -f wp-content/mu-plugins/aralia-secrets-loader.php; }
+m_build_upper() { mkdir wp-content/plugins/aralia-core/build; echo x > wp-content/plugins/aralia-core/build/x.PHP.js; }
+m_build_php5()  { mkdir wp-content/plugins/aralia-core/build; echo x > wp-content/plugins/aralia-core/build/x.php5.js; }
+m_build_photo() { mkdir wp-content/plugins/aralia-core/build; echo x > wp-content/plugins/aralia-core/build/photo.v2.png; }
+voc "paquete sin aralia-core (existe en git): bloquea, o se borraría del servidor" deny m_no_core
+voc "paquete sin el tema (existe en git): bloquea"                  deny m_no_theme
+voc "paquete sin un mu-plugin aralia-* de git: bloquea"             deny m_no_mu
+voc "paquete sin el cargador de secretos: bloquea"                  deny m_no_loader
+voc "build/ con x.PHP.js (mayúsculas)"                              deny m_build_upper
+voc "build/ con x.php5.js"                                          deny m_build_php5
+voc "build/ con photo.v2.png (nombre legítimo con 'ph')"            pass m_build_photo
 voc "paquete idéntico a git (el .gitkeep de git no cuenta)"        pass m_none
 voc "build/ con doble extensión x.php.js"                          deny m_build_dbl
 voc "build/ con doble extensión x.phtml.map"                       deny m_build_phtml
@@ -333,10 +356,19 @@ if ( REPO_ROOT="$V"; TRUSTED_DIR="$LB"; LOCAL_LOG_DIR="$T/lhome"; install_launch
 
 # --- check_third_party: lista cerrada de terceros (ops/third-party.lock del commit) ---------------------------
 echo "check_third_party"
-PLIST_OK=$'name,status,version,auto_update\nwoocommerce,active,11.2.1,on\nwompi-portal-de-pagos,active,3.2.1,off\nupdraftplus,active,1.25.1,on\naralia-core,active,0.1.0,off\naralia-wompi-guard,must-use,0.1,off\nhostinger-tools,must-use,1.0,off\nadvanced-cache.php,dropin,,off'
+PLIST_OK=$'name,status,version,auto_update\nwoocommerce,active,11.2.1,on\nwompi-portal-de-pagos,active,3.2.1,off\nwordfence,active,9.0.2,off\nupdraftplus,active,1.25.1,on\naralia-core,active,0.1.0,off\naralia-wompi-guard,must-use,0.1,off\nhostinger-tools,must-use,1.0,off\nadvanced-cache,dropin,,off'
+FS_PLUGINS_OK=$'index.php\nwoocommerce\nwompi-portal-de-pagos\nwordfence\nupdraftplus\naralia-core'
+FS_THEMES_OK=$'index.php\ntwentytwentysix\naralia'
+FS_MU_OK=$'index.php\nhostinger-tools.php\naralia-wompi-guard'
+FS_WPC_OK=$'index.php\nadvanced-cache.php\nobject-cache.php.bak'
 CT_CORE="7.1.4"; CT_PLIST="$PLIST_OK"; CT_WARN=""
+CT_FS_PLUGINS="$FS_PLUGINS_OK"; CT_FS_THEMES="$FS_THEMES_OK"; CT_FS_MU="$FS_MU_OK"; CT_FS_WPC="$FS_WPC_OK"
 on_target() {
 	case "$2" in
+		*"ls -A '/p/wp-content/plugins'"*)    printf '%s\n' "$CT_FS_PLUGINS" ;;
+		*"ls -A '/p/wp-content/themes'"*)     printf '%s\n' "$CT_FS_THEMES" ;;
+		*"ls -A '/p/wp-content/mu-plugins'"*) printf '%s\n' "$CT_FS_MU" ;;
+		*"ls -A '/p/wp-content'"*)            printf '%s\n' "$CT_FS_WPC" ;;
 		*"wp core verify-checksums"*)   echo "${CT_WARN}Success: WordPress installation verifies against checksums." ;;
 		*"wp core version"*)            echo "$CT_CORE" ;;
 		*"wp plugin verify-checksums"*) echo "${CT_WARN}Success: Verified 4 of 4 plugins." ;;
@@ -355,9 +387,19 @@ CT_PLIST="${PLIST_OK/11.2.1/11.3.0}"; ct_deny "WooCommerce con otra versión: bl
 CT_PLIST="$PLIST_OK"$'\nevil-plugin,active,1.0,off'; ct_deny "plugin no inventariado: bloquea"
 CT_PLIST="${PLIST_OK/3.2.1,off/3.2.1,on}"; ct_deny "Wompi con actualización automática activada: bloquea"
 CT_PLIST="$PLIST_OK"$'\nrogue-mu,must-use,1.0,off'; ct_deny "mu-plugin ajeno no inventariado: bloquea"
-CT_PLIST="$PLIST_OK"$'\nobject-cache.php,dropin,,off'; ct_deny "drop-in no inventariado: bloquea"
-CT_PLIST="$PLIST_OK"$'\naralia-extra,must-use,1.0,off'; ct_pass "mu-plugin aralia-* (código propio) no necesita estar en el manifiesto"
-CT_PLIST="$PLIST_OK"; CT_CORE="7.1.5"; ct_deny "WordPress con otra versión: bloquea"
+CT_PLIST="$PLIST_OK"$'\nobject-cache,dropin,,off'; ct_deny "drop-in no inventariado: bloquea"
+CT_PLIST="$PLIST_OK"$'\naralia-extra,must-use,1.0,off'; ct_pass "mu-plugin aralia-* en WP-CLI no necesita estar en el manifiesto"
+CT_PLIST="$PLIST_OK"; CT_CORE="7.1.9"; ct_pass "WordPress 7.1.9 con 'core 7.1.*' en el lock: pasa (actualizaciones menores automáticas)"
+CT_CORE="7.2.0"; ct_deny "WordPress 7.2.0 fuera de 7.1.*: bloquea"; CT_CORE="7.1.4"
+CT_FS_PLUGINS="$FS_PLUGINS_OK"$'\nevil'; ct_deny "carpeta de plugin no inventariada (inventario por archivos)"
+CT_FS_PLUGINS="$FS_PLUGINS_OK"; CT_FS_THEMES="$FS_THEMES_OK"$'\nevil-theme'; ct_deny "tema no inventariado: bloquea"
+CT_FS_THEMES="$FS_THEMES_OK"; CT_FS_MU="$FS_MU_OK"$'\nrogue.php'; ct_deny "mu-plugin ajeno en disco, aunque WP-CLI no lo liste: bloquea"
+CT_FS_MU="$FS_MU_OK"$'\naralia-x.php'; ct_pass "mu-plugin aralia-* en disco no necesita estar en el manifiesto"
+CT_FS_MU="$FS_MU_OK"; CT_FS_WPC="$FS_WPC_OK"$'\ndb.php'; ct_deny "drop-in db.php no inventariado: bloquea"
+CT_FS_WPC="$FS_WPC_OK"; CT_FS_PLUGINS="$FS_PLUGINS_OK"$'\nhello.php'; ct_deny "plugin de un solo archivo no inventariado: bloquea"
+CT_FS_PLUGINS="$FS_PLUGINS_OK"; CT_PLIST="${PLIST_OK/wordfence,active/wordfence,inactive}"; ct_deny "Wordfence desactivado: bloquea"
+CT_PLIST="${PLIST_OK/wordfence,active,9.0.2,off/}"; ct_deny "Wordfence ausente: bloquea"
+CT_PLIST="$PLIST_OK"; CT_CORE="7.1.4"
 CT_CORE="7.1.4"; CT_WARN="Warning: Could not retrieve the checksums. "; ct_deny "verify-checksums con avisos: bloquea"
 CT_WARN=""; ct 0123456789abcdef0123456789abcdef01234567 && fail "SHA sin ops/third-party.lock debía bloquear" || pass "commit sin ops/third-party.lock: bloquea"
 unset -f on_target
@@ -372,14 +414,17 @@ echo "apply_release / last_deployed"
 AH="$T/ahome"; rm -rf "$AH"; mkdir -p "$AH"; AP="$T/apkg"; rm -rf "$AP"; mkdir -p "$AP/x"; ASHA="2222222222222222222222222222222222222222"
 echo t > "$AP/aralia-$ASHA.tar.gz"; echo s > "$AP/aralia-$ASHA.tar.gz.sha256"
 apply() { # $1 kind; $2 confirmación escrita; $3 stub de sync (ok|failreal|failsim); $4 stub de verify (ok|fail); $5 allow; $6 tp de staging (abc|none|otro)
-	rm -rf "$AH"; mkdir -p "$AH"; : > "$T/launcher.called"
+	rm -rf "$AH"; mkdir -p "$AH"; : > "$T/launcher.called"; rm -f "$T/ct.n" "$T/ct.args"
+	[ -z "${APPLY_SEED:-}" ] || printf '%s\n' "$APPLY_SEED" > "$AH/production.log"
 	case "${6:-abc}" in none) echo "2026-01-01T00:00:00Z $ASHA s verified launcher=x allow=" > "$AH/staging.log" ;; *) echo "2026-01-01T00:00:00Z $ASHA s verified launcher=x allow= tp=${6:-abc}" > "$AH/staging.log" ;; esac
 	( LOCAL_LOG_DIR="$AH"; SELF="$T/self.sh"; echo '#!/bin/sh' > "$SELF"
 	  ALLOW_SHARED_STAGING="${5:-}"; ALLOW_UNPROTECTED_MAIN=""
 	  eval "sync_release() { $(case "$3" in ok) echo 'return 0' ;; failreal) echo '[ "${4:-}" = -n ] && return 0; return 1' ;; failsim) echo '[ "${4:-}" = -n ] && return 1; return 0' ;; esac); }"
 	  eval "verify_target() { $(case "$4" in ok) echo 'return 0' ;; *) echo 'return 1' ;; esac); }"
 	  install_launcher() { echo called > "$T/launcher.called"; }
-	  check_third_party() { TP_HASH=abc; }
+	  check_third_party() { local n; n="$(cat "$T/ct.n" 2>/dev/null || echo 0)"; echo $((n+1)) > "$T/ct.n"; echo "$1" >> "$T/ct.args"
+	    if [ "${CT_CHANGE:-}" = 1 ] && [ "$n" -ge 1 ]; then TP_HASH=zzz; else TP_HASH=abc; fi; }
+	  on_target() { if [ "${NO_BASELINE:-}" = 1 ]; then case "$2" in *has-command*) return 1 ;; esac; fi; return 0; }
 	  apply_release production "$ASHA" "$AP" h /p "$1" "OK-CONFIRM" <<<"$2" ) >/dev/null 2>&1 || true
 }
 logn() { local c; c="$(grep -c "$1" "$AH/production.log" 2>/dev/null || true)"; echo "${c:-0}"; }
@@ -389,12 +434,23 @@ apply verified "otra-cosa" ok ok;     [ "$(logn verified)" = 0 ] && pass "confir
 apply verified "OK-CONFIRM" failsim ok; [ "$(logn verified)" = 0 ] && pass "simulación que falla: no registra" || fail "simulación que falla: no registra"
 apply verified "OK-CONFIRM" failreal ok; [ "$(logn verified)" = 0 ] && pass "despliegue real que falla: no registra" || fail "despliegue real que falla: no registra"
 apply verified "OK-CONFIRM" ok fail;   [ "$(logn verified)" = 0 ] && [ ! -s "$T/launcher.called" ] && pass "verify_target que falla: no registra ni cambia el lanzador" || fail "verify_target que falla: no registra ni cambia el lanzador"
-apply rollback "OK-CONFIRM" ok ok;     [ "$(logn ' rollback launcher=')" = 1 ] && [ ! -s "$T/launcher.called" ] && [ ! -f "$AH/releases/aralia-$ASHA.tar.gz" ] && pass "rollback: registra como rollback, sin guardar paquete ni tocar el lanzador" || fail "rollback: registra como rollback, sin guardar paquete ni tocar el lanzador"
+APPLY_SEED="2026-01-01T00:00:00Z 3333333333333333333333333333333333333333 s verified launcher=x allow= tp=abc"; apply rollback "OK-CONFIRM" ok ok; APPLY_SEED=""; [ "$(logn ' rollback launcher=')" = 1 ] && [ ! -s "$T/launcher.called" ] && [ ! -f "$AH/releases/aralia-$ASHA.tar.gz" ] && pass "rollback: registra como rollback, sin guardar paquete ni tocar el lanzador" || fail "rollback: registra como rollback, sin guardar paquete ni tocar el lanzador"
 apply verified "OK-CONFIRM" ok ok yes; [ "$(logn 'allow=ALLOW_SHARED_STAGING')" = 1 ] && pass "las aceptaciones de riesgo ALLOW_* quedan en el registro" || fail "las aceptaciones de riesgo ALLOW_* quedan en el registro"
 apply verified "OK-CONFIRM" ok ok "" otro; [ "$(logn verified)" = 0 ] && pass "terceros de producción distintos a los de staging: no despliega" || fail "terceros de producción distintos a los de staging: no despliega"
 apply verified "OK-CONFIRM" ok ok "" none; [ "$(logn verified)" = 0 ] && pass "staging sin huella de terceros (tp=): no despliega" || fail "staging sin huella de terceros (tp=): no despliega"
 apply verified "OK-CONFIRM" ok ok; [ "$(logn 'tp=abc')" = 1 ] && pass "el registro guarda la huella de terceros (tp=)" || fail "el registro guarda la huella de terceros (tp=)"
-apply rollback "OK-CONFIRM" ok ok "" otro; [ "$(logn ' rollback launcher=')" = 1 ] && pass "rollback no exige coincidir con staging" || fail "rollback no exige coincidir con staging"
+APPLY_SEED="2026-01-01T00:00:00Z 3333333333333333333333333333333333333333 s verified launcher=x allow= tp=abc"; apply rollback "OK-CONFIRM" ok ok "" otro; APPLY_SEED=""; [ "$(logn ' rollback launcher=')" = 1 ] && pass "rollback no exige coincidir con staging" || fail "rollback no exige coincidir con staging"
+CT_CHANGE=1; apply verified "OK-CONFIRM" ok ok; CT_CHANGE=0
+[ "$(logn verified)" = 0 ] && pass "terceros que cambian durante el despliegue (huella distinta tras copiar): no registra" || fail "terceros que cambian durante el despliegue: no registra"
+NO_BASELINE=1; apply verified "OK-CONFIRM" ok ok; NO_BASELINE=0
+[ "$(logn verified)" = 0 ] && pass "producción sin 'wp aralia baseline check' (Fase 2): se niega antes de copiar" || fail "producción sin baseline: se niega antes de copiar"
+LASTV="3333333333333333333333333333333333333333"
+APPLY_SEED="2026-01-01T00:00:00Z $LASTV s verified launcher=x allow= tp=abc"; apply rollback "OK-CONFIRM" ok ok; APPLY_SEED=""
+[ "$(head -1 "$T/ct.args")" = "$LASTV" ] && pass "rollback: los terceros se comprueban contra el lock del último despliegue verificado, no el del SHA destino" || fail "rollback: lock del último despliegue verificado"
+apply verified "OK-CONFIRM" ok ok; [ "$(head -1 "$T/ct.args")" = "$ASHA" ] && pass "despliegue normal: los terceros se comprueban contra el lock del SHA a desplegar" || fail "despliegue normal: lock del SHA a desplegar"
+# staging_tp_matches: un registro sin tp= no hereda el de una línea anterior
+printf '2026-01-01T00:00:00Z %s s verified launcher=x allow= tp=abc\n2026-01-02T00:00:00Z %s s verified launcher=x allow=\n' "$ASHA" "$ASHA" > "$T/stg-tp.log"
+if ( deploy_log() { echo "$T/stg-tp.log"; }; TP_HASH=abc; staging_tp_matches "$ASHA" ) >/dev/null 2>&1; then fail "línea verified sin tp= no debe heredar el de la anterior"; else pass "staging_tp_matches: una línea sin tp= no hereda la huella de otra"; fi
 # last_deployed ignora los rollback: no mueven el ancla de confianza
 rm -rf "$AH"; mkdir -p "$AH"
 printf '2026-01-01T00:00:00Z %s s verified x\n2026-01-02T00:00:00Z %s s rollback x\n\n' "3333333333333333333333333333333333333333" "$ASHA" > "$AH/production.log"

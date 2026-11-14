@@ -1,17 +1,21 @@
 # Lista cerrada de lo que Hostinger/wp-admin instala (research R-15, constitución 1.2.0). ops/deploy.sh la lee DEL COMMIT que se
-# despliega y, antes de copiar nada, falla si el servidor tiene algo que no esté aquí o con otra versión.
+# despliega y, antes de copiar nada, falla si el servidor tiene algo que no esté aquí o con otra versión. Dos comprobaciones:
+# inventario por archivos (carpetas de plugins, temas, mu-plugins y *.php sueltos de wp-content; sin ejecutar PHP) y WP-CLI.
 # Formato (una entrada por línea):
-#   core    <versión>                 WordPress
+#   core    <versión>                 WordPress: exacta (7.1.4) o de la serie (7.1.* = cualquier 7.1.x, deja activas las menores automáticas)
 #   plugin  <slug> <versión|any>      "any" solo para lo que no se puede fijar (UpdraftPlus Premium, instalación manual)
-#   mu      <nombre>                  mu-plugins ajenos (los aralia-* son código propio y no se listan)
-#   dropin  <archivo>                 drop-ins de wp-content (advanced-cache.php, object-cache.php)
+#   theme   <slug>                    temas instalados (el tema aralia es código propio y no se lista)
+#   mu      <nombre>                  mu-plugins ajenos, SIN .php (los aralia-* son código propio y no se listan)
+#   dropin  <nombre>                  drop-ins de wp-content, SIN .php (advanced-cache, object-cache…)
+# woocommerce, wompi-portal-de-pagos y wordfence deben estar instalados y ACTIVOS. Wompi con auto_update apagado.
 # Cambiar una versión = PR aprobado + probar en staging (T168). Mantener igual que ops/inventory.md y composer.json.
-core 7.1.4
+core 7.1.*
 plugin woocommerce 11.2.1
 plugin wompi-portal-de-pagos 3.2.1
 plugin wordfence 9.0.2
 plugin litespeed-cache 7.9.2
 plugin updraftplus any
-# ☐ T012: al contratar Hostinger, ejecutar `wp plugin list --status=must-use` y `--status=dropin` y registrar aquí lo que
-# inyecta el hosting (p. ej. mu hostinger-tools, dropin advanced-cache.php, dropin object-cache.php) con su justificación
-# en ops/inventory.md. Hasta entonces el despliegue falla cerrado si aparece algo no listado.
+# ☐ T012: al contratar Hostinger (y en staging, que debe replicar lo mismo), ejecutar `ls wp-content/themes wp-content/mu-plugins`
+# y `ls wp-content/*.php` y registrar aquí lo que inyecta el hosting (p. ej. theme twentytwentyfive, mu hostinger-tools,
+# dropin advanced-cache, dropin object-cache) con su justificación en ops/inventory.md. Hasta entonces el despliegue falla
+# cerrado si aparece algo no listado.

@@ -138,13 +138,16 @@ on_target() {
 
 # Copia el paquete extraído ($1) a la raíz de WordPress del destino. $2 host ("" local), $3 ruta, $4 "-n" para simular.
 sync_release() {
-	local src="$1" host="$2" path="$3" dry="${4:-}" dest d n
+	local src="$1" host="$2" path="$3" dry="${4:-}" dest d n links
 	if [ -z "$path" ] || [ "$path" = "/" ]; then die "Ruta de destino vacía o /"; fi
 	[ -d "$src/wp-content" ] || die "Paquete sin wp-content/"
 	if [ -z "$host" ]; then dest="$path"; else dest="$host:$path"; fi
 	require_rsync3
 
 	on_target "$host" "test -f '$path/wp-config.php'" || die "No hay wp-config.php en $path (¿ruta equivocada?)"
+	# Un enlace simbólico en el destino (p. ej. plugins/aralia-core -> ../..) convertiría el --delete en un borrado de todo el sitio.
+	links="$(on_target "$host" "cd '$path' && for p in wp-content wp-content/plugins wp-content/themes wp-content/mu-plugins wp-content/plugins/aralia-core wp-content/themes/aralia; do [ -L \"\$p\" ] && echo \"\$p\"; done; find wp-content/mu-plugins -maxdepth 1 -name 'aralia-*' -type l 2>/dev/null; true")" || return 1
+	[ -z "$links" ] || die "Enlaces simbólicos en el destino (no se copia nada): $(echo "$links" | tr '\n' ' ')"
 	on_target "$host" "mkdir -p '$path/wp-content/plugins' '$path/wp-content/themes' '$path/wp-content/mu-plugins'" || return 1
 
 	# --checksum: compara contenido, no tamaño+hora (un archivo con igual tamaño y hora no se saltaría).
@@ -175,7 +178,7 @@ remove_orphans() {
 	listing="$(on_target "$host" "ls -1 '$path/wp-content/mu-plugins' 2>/dev/null | grep '^aralia-' || true")" || return 1
 	while IFS= read -r name; do
 		[ -n "$name" ] || continue
-		[[ "$name" =~ ^aralia-[A-Za-z0-9._-]+$ ]] || return 1
+		[[ "$name" =~ ^aralia-[A-Za-z0-9._-]+$ ]] || die "Nombre no permitido en mu-plugins del servidor: $name"
 		[ -e "$src/wp-content/mu-plugins/$name" ] && continue
 		orphan_delete "$host" "$path" "wp-content/mu-plugins/$name" "$dry" || return 1
 	done <<<"$listing"
@@ -360,8 +363,8 @@ verify_own_code() {
 			while IFS= read -r f; do
 				base="$(basename "$f")"
 				# Ninguna extensión ejecutable en medio del nombre (x.php.js, x.phtml.map…) salvo la terminación exacta .asset.php.
-				stem="${base%.asset.php}"
-				if [[ "$stem" =~ \.(php|phtml|phar|pht)([.]|$) ]] || [[ "$stem" =~ ^\.|^$ ]]; then die "build/ con nombre no permitido: $f"; fi
+				stem="$(printf '%s' "${base%.asset.php}" | tr 'A-Z' 'a-z')"
+				if [[ "$stem" =~ \.(php[0-9]*|phtml|phar|pht|phps|inc|shtml|cgi|pl|py)([.]|$) ]] || [[ "$stem" =~ ^\.|^$ ]]; then die "build/ con nombre no permitido: $f"; fi
 				case "$base" in
 					*.asset.php)
 						[[ "$base" =~ ^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*\.asset\.php$ ]] || die "build/ con nombre no permitido: $f"
@@ -388,6 +391,15 @@ verify_own_code() {
 		diff -r "$dir/git/$PROJECT_REL/wp-content/mu-plugins/$name" "$e" >/dev/null || die "El paquete difiere del árbol de git en mu-plugins/$name"
 		n=$((n+1))
 	done
+	# 4. Completitud: todo componente propio que git tiene en <sha> debe viajar. Si no, remove_orphans lo borraría del servidor.
+	git -C "$REPO_ROOT" cat-file -e "$sha:$PROJECT_REL/wp-content/plugins/aralia-core/aralia-core.php" 2>/dev/null \
+		&& { [ -d "$x/wp-content/plugins/aralia-core" ] || die "Al paquete le falta aralia-core (existe en git)"; }
+	git -C "$REPO_ROOT" cat-file -e "$sha:$PROJECT_REL/wp-content/themes/aralia/style.css" 2>/dev/null \
+		&& { [ -d "$x/wp-content/themes/aralia" ] || die "Al paquete le falta el tema aralia (existe en git)"; }
+	while IFS= read -r name; do
+		[[ "$name" == aralia-* ]] || continue
+		[ -e "$x/wp-content/mu-plugins/$name" ] || die "Al paquete le falta el mu-plugin $name (existe en git)"
+	done < <(git -C "$REPO_ROOT" ls-tree --name-only "$sha:$PROJECT_REL/wp-content/mu-plugins/" 2>/dev/null || true)
 	[ "$n" -gt 0 ] || die "No se pudo verificar ningún componente propio: el paquete no coincide con git"
 	info "Código propio del paquete idéntico al de git ($n componentes, sin extras ni enlaces)"
 }
@@ -515,19 +527,62 @@ check_payment_reviews() {
 
 sha256_stdin() { if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi; }
 
-# Lo instalado por Hostinger/wp-admin (núcleo, plugins, mu-plugins, drop-ins) debe coincidir con ops/third-party.lock DEL COMMIT
-# que se despliega (lista cerrada y versiones exactas; "any" = cualquier versión, p. ej. UpdraftPlus Premium). Se comprueba ANTES
-# de copiar y con --skip-plugins --skip-themes, para que ningún código del servidor se certifique a sí mismo.
+# Lo instalado por Hostinger/wp-admin (núcleo, plugins, temas, mu-plugins, drop-ins) debe coincidir con ops/third-party.lock DEL
+# COMMIT que se despliega: lista cerrada y versiones exactas ("any" = cualquier versión; núcleo "7.1.*" = cualquier 7.1.x).
+# 1) Inventario por sistema de archivos (sin ejecutar PHP): nada instalado que no esté en el manifiesto.
+# 2) WP-CLI: versiones, plugins activos y checksums. OJO: `--skip-plugins --skip-themes` NO omite wp-config.php, los
+#    mu-plugins ni los drop-ins, así que estas salidas las podría falsear un mu-plugin hostil (RR-13): el inventario del
+#    paso 1 es lo que no depende de ese código. Se hace ANTES de copiar y se repite tras copiar (apply_release).
 # Deja en TP_HASH la huella de lo encontrado: producción exige la misma que staging tuvo para ese SHA.
 TP_HASH=""
+THIRD_PARTY_REQUIRED=(woocommerce wompi-portal-de-pagos wordfence)   # deben estar instalados y activos
+
+# Entradas (archivos o carpetas) de un directorio del destino, sin PHP; un nombre por línea.
+list_dir() { on_target "$1" "ls -A '$2' 2>/dev/null || true"; }
+
+inventory_fs() {
+	local host="$1" path="$2" manifest="$3" e base kind dir
+	for kind in plugins themes mu-plugins; do
+		dir="$path/wp-content/$kind"
+		while IFS= read -r e; do
+			[ -n "$e" ] || continue
+			[[ "$e" =~ ^[A-Za-z0-9._-]+$ ]] || die "Nombre no permitido en $kind del servidor: $e"
+			base="${e%.php}"
+			[ "$e" = index.php ] && continue
+			case "$kind" in
+				plugins)    [ "$e" = aralia-core ] && continue
+				            grep -Eq "^plugin $e " <<<"$manifest" || die "Plugin instalado no inventariado: $e (ops/third-party.lock)" ;;
+				themes)     [ "$e" = aralia ] && continue
+				            grep -qxF "theme $e" <<<"$manifest" || die "Tema instalado no inventariado: $e (ops/third-party.lock)" ;;
+				mu-plugins) [[ "$e" == aralia-* ]] && continue
+				            grep -qxF "mu $base" <<<"$manifest" || die "mu-plugin instalado no inventariado: $e (ops/third-party.lock)" ;;
+			esac
+		done < <(list_dir "$host" "$dir")
+	done
+	while IFS= read -r e; do
+		[ -n "$e" ] || continue
+		[[ "$e" =~ ^[A-Za-z0-9._-]+$ ]] || die "Nombre no permitido en wp-content del servidor: $e"
+		[ "$e" = index.php ] && continue
+		grep -qxF "dropin ${e%.php}" <<<"$manifest" || die "Drop-in instalado no inventariado: $e (ops/third-party.lock)"
+	done < <(list_dir "$host" "$path/wp-content" | grep '\.php$' || true)
+}
+
 check_third_party() {
-	local sha="$1" host="$2" path="$3" manifest out core_v list norm name status ver au
+	local sha="$1" host="$2" path="$3" manifest out core_v list norm name status ver au k v ok req seen=" "
 	manifest="$(git -C "$REPO_ROOT" show "$sha:$PROJECT_REL/ops/third-party.lock" 2>/dev/null | sed 's/#.*//' | awk 'NF')" || true
 	[ -n "$manifest" ] || die "Falta ops/third-party.lock en $sha (lista cerrada de terceros y versiones)"
+	inventory_fs "$host" "$path" "$manifest"
 	out="$(on_target "$host" "cd '$path' && wp core verify-checksums --skip-plugins --skip-themes 2>&1")" || die "wp core verify-checksums falló: $out"
 	if grep -qi 'warning' <<<"$out"; then die "wp core verify-checksums con avisos: $out"; fi
 	core_v="$(on_target "$host" "cd '$path' && wp core version --skip-plugins --skip-themes")" || die "No se pudo leer la versión de WordPress"
-	grep -qxF "core $core_v" <<<"$manifest" || die "WordPress $core_v no coincide con ops/third-party.lock de $sha"
+	ok=no
+	while read -r k v; do
+		[ "$k" = core ] || continue
+		[[ "$v" =~ ^[0-9]+\.[0-9]+(\.[0-9]+|\.\*)$ ]] || die "ops/third-party.lock: versión de núcleo no válida: $v"
+		# shellcheck disable=SC2254  # $v es un patrón a propósito (validado arriba)
+		case "$core_v" in $v) ok=yes ;; esac
+	done <<<"$manifest"
+	[ "$ok" = yes ] || die "WordPress $core_v no coincide con ops/third-party.lock de $sha"
 	out="$(on_target "$host" "cd '$path' && wp plugin verify-checksums ${THIRD_PARTY_PLUGINS[*]} --skip-plugins --skip-themes 2>&1")" || die "wp plugin verify-checksums falló: $out"
 	if grep -qi 'warning' <<<"$out"; then die "wp plugin verify-checksums con avisos: $out"; fi
 	list="$(on_target "$host" "cd '$path' && wp plugin list --fields=name,status,version,auto_update --format=csv --skip-plugins --skip-themes")" || die "No se pudo listar los plugins"
@@ -535,6 +590,7 @@ check_third_party() {
 	while IFS=, read -r name status ver au; do
 		{ [ -n "$name" ] && [ "$name" != name ]; } || continue
 		[[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || die "Nombre de plugin no permitido en el servidor: $name"
+		name="${name%.php}"   # WP-CLI quita la extensión de mu-plugins y drop-ins de un solo archivo
 		case "$status" in
 			must-use)
 				[[ "$name" == aralia-* ]] && continue
@@ -550,9 +606,18 @@ check_third_party() {
 				if [ "$name" = wompi-portal-de-pagos ] && [ "$au" != off ]; then
 					die "Wompi tiene la actualización automática activada (auto_update=$au): desactívala en wp-admin y en hPanel"
 				fi
+				for req in "${THIRD_PARTY_REQUIRED[@]}"; do
+					if [ "$name" = "$req" ]; then
+						[ "$status" = active ] || die "$name está $status: debe estar activo"
+						seen="${seen}${name} "
+					fi
+				done
 				norm="${norm}plugin $name $ver"$'\n' ;;
 		esac
 	done <<<"$list"
+	for req in "${THIRD_PARTY_REQUIRED[@]}"; do
+		case "$seen" in *" $req "*) ;; *) die "Falta el plugin $req (debe estar instalado y activo)" ;; esac
+	done
 	TP_HASH="$(printf '%s' "$norm" | sort | sha256_stdin)"
 	info "Terceros del servidor conformes con ops/third-party.lock (huella ${TP_HASH:0:12})"
 }
@@ -561,7 +626,7 @@ check_third_party() {
 staging_tp_matches() {
 	local sha="$1" f stg
 	f="$(deploy_log staging)"
-	stg="$(awk -v s="$sha" '$2==s && $4=="verified" { for (i=5;i<=NF;i++) if ($i ~ /^tp=/) t=substr($i,4) } END { print t }' "$f" 2>/dev/null || true)"
+	stg="$(awk -v s="$sha" '$2==s && $4=="verified" { t=""; for (i=5;i<=NF;i++) if ($i ~ /^tp=/) t=substr($i,4) } END { print t }' "$f" 2>/dev/null || true)"
 	[ -n "$stg" ] || die "El registro de staging de $sha no trae la huella de terceros (tp=): vuelve a desplegarlo en staging"
 	[ "$stg" = "$TP_HASH" ] || die "Los terceros de producción difieren de los probados en staging para $sha (huella $TP_HASH, staging $stg)"
 }
@@ -581,9 +646,18 @@ cleanup() { [ -n "$DEPLOY_TMP" ] && rm -rf "$DEPLOY_TMP"; return 0; }
 
 # Simulación, confirmación, copia, verificación y registro (compartido por deploy y rollback).
 apply_release() {
-	local target="$1" sha="$2" tmp="$3" host="$4" path="$5" kind="$6" confirm="$7" answer nchanges ndel flags=""
-	check_third_party "$sha" "$host" "$path"
+	local target="$1" sha="$2" tmp="$3" host="$4" path="$5" kind="$6" confirm="$7" answer nchanges ndel flags="" lock_sha tp_before
+	# Un rollback comprueba los terceros contra el lock del último despliegue verificado (lo que debe estar instalado AHORA),
+	# no contra el del SHA de destino: si después se actualizó un tercero, el lock antiguo ya no describe el servidor.
+	lock_sha="$sha"
+	if [ "$kind" = rollback ]; then lock_sha="$(last_deployed production)"; [ -n "$lock_sha" ] || die "No hay un despliegue verificado previo contra el que comprobar los terceros"; fi
+	check_third_party "$lock_sha" "$host" "$path"
+	tp_before="$TP_HASH"
 	if [ "$target" = production ] && [ "$kind" = verified ]; then staging_tp_matches "$sha"; fi
+	if [ "$target" = production ]; then
+		on_target "$host" "cd '$path' && wp cli has-command 'aralia baseline'" >/dev/null 2>&1 \
+			|| die "En producción falta 'wp aralia baseline check' (Fase 2, T032): no se despliega hasta que exista, para no copiar y fallar la verificación"
+	fi
 	info "Simulación en $target ($host:$path):"
 	sync_release "$tmp/x" "$host" "$path" -n > "$tmp/dry-run.txt" || die "La simulación falló (ruta, ssh o rsync); no se despliega nada"
 	nchanges="$(grep -vc '^\.' "$tmp/dry-run.txt" || true)"
@@ -596,6 +670,9 @@ apply_release() {
 
 	sync_release "$tmp/x" "$host" "$path" > /dev/null \
 		|| die "El despliegue falló a medias en $target: estado parcial. Si es producción, activa el modo mantenimiento de pagos y vuelve a un SHA bueno con ops/deploy.sh rollback <sha> (ops/runbooks/deploy.md)"
+	# Los terceros pudieron cambiar entre la comprobación y la copia (o durante ella): se repite antes de registrar.
+	check_third_party "$lock_sha" "$host" "$path"
+	[ "$TP_HASH" = "$tp_before" ] || die "Los terceros del servidor cambiaron durante el despliegue en $target (huella $tp_before → $TP_HASH). No queda registrado: revisa y repite"
 	verify_target "$target" "$host" "$path" \
 		|| die "Verificación fallida en $target. No queda registrado. Si es producción: activa el modo mantenimiento de pagos y vuelve a un SHA bueno con ops/deploy.sh rollback <sha> (ops/runbooks/deploy.md)"
 	mkdir -p "$LOCAL_LOG_DIR/releases" && chmod 700 "$LOCAL_LOG_DIR"

@@ -1,6 +1,6 @@
 # Línea base de configuración — Aralía Beauty Store
 
-Fuente: research R-03, R-12, R-13, R-15, R-16, R-17, R-21; compliance-mapping 2.2.x / 8.9. La verificación automática es `wp aralia baseline check` (se implementa en la fase 2, T032) y corre después de cada despliegue.
+Fuente: research R-03, R-12, R-13, R-15, R-16, R-17, R-21; compliance-mapping 2.2.x / 8.9. La verificación automática es `wp aralia baseline check` (se implementa en la fase 2, T032) y corre después de cada despliegue; en producción `ops/deploy.sh` se niega a desplegar mientras no exista.
 
 Estado: ☐ pendiente · ☑ verificado (fecha, quién).
 
@@ -26,7 +26,7 @@ Estado: ☐ pendiente · ☑ verificado (fecha, quién).
 | # | Requisito | Valor | Estado |
 |---|-----------|-------|--------|
 | W1 | Versiones | WordPress, WooCommerce, Wompi, Wordfence y LiteSpeed los instala y actualiza Hostinger; la versión probada (WP 7.1.4, WooCommerce 11.2.1, Wompi 3.2.1, Wordfence 9.0.2, LiteSpeed 7.9.2 al 2026-11-13) se registra en `ops/inventory.md` | ☐ |
-| W1b | Actualizaciones | Actualización automática **desactivada** en el plugin de Wompi; automáticas menores de WordPress activas; copia previa (UpdraftPlus) y prueba en staging antes de actualizar WooCommerce/Wordfence/LiteSpeed (T168) | ☐ |
+| W1b | Actualizaciones | Actualización automática **desactivada** en el plugin de Wompi; automáticas menores de WordPress activas (`ops/third-party.lock` admite `core 7.1.*`; subir a 7.2 exige PR + staging); copia previa (UpdraftPlus) y prueba en staging antes de actualizar WooCommerce/Wordfence/LiteSpeed (T168) | ☐ |
 | W2 | Usuarios | Sin usuario `admin`; una sola administradora permanente (Sara); cuentas temporales según `ops/runbooks/access.md` | ☐ |
 | W3 | Registro | Clientas solo con rol `customer` | ☐ |
 | W4 | XML-RPC, `/wp/v2/users`, archivos de autor | Deshabilitados (`aralia-hardening.php`) | ☐ |

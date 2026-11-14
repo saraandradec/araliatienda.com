@@ -96,6 +96,8 @@ E-commerce/
 │   │   ├── blocks/                   # (fuente; NO viaja en el paquete: se compila a build/) Carrito lateral, set card, Full face, selector de tono, constructor de neceser, barra superior, Cómo llega
 │   │   └── migrations/               # Tablas aralia_* versionadas
 │   └── mu-plugins/
+│       ├── aralia-wompi-guard.php    # Cargador (WordPress no carga mu-plugins en subcarpetas); requiere aralia-wompi-guard/
+│       ├── aralia-secrets-loader.php # Lee aralia-secrets.php de fuera del webroot (falla cerrado)
 │       ├── aralia-wompi-guard/       # Llaves, TLS, order-pay propio, manejador de eventos, conciliación, neutralización de wc-voided (H13), prueba de contrato
 │       └── aralia-hardening.php      # DISALLOW_FILE_EDIT (sin DISALLOW_FILE_MODS: se actualiza desde wp-admin), sin XML-RPC, sin enumeración de usuarios, uploads sin PHP
 ├── tests/php/{unit,integration,contract}/ · tests/e2e/ · tests/load/ (k6) · tests/fixtures/ (eventos Wompi firmados, CSV)
@@ -160,6 +162,8 @@ E-commerce/
 | GitHub Free no ofrece environments protegidos ni protección de rama en repos privados | Despliegue **local** `ops/deploy.sh`; la llave SSH no vive en GitHub; el CI solo arma el paquete | Constitución 1.1.0, R-15, T009 |
 | Gates T0 de la Fase 1, vueltas 2 y 3 (security, code-reviewer, architect + 6 verificaciones adversariales) | Criterio invertido: todo commit desde el último despliegue exige PR aprobado (salvo documentación exenta); lista de revisoras leída del último despliegue; registro de despliegues local; el paquete se compara con `git archive`; CI sin suites omitidas en silencio; cargador de secretos falla cerrado | `ops/deploy.sh`, `ecommerce-ci.yml`, `aralia-secrets-loader.php`, `tests/ops/deploy_test.sh` |
 | Gates T0 de la Fase 1, vuelta 4 (security, code-reviewer, architect) | Lanzador de confianza fuera del repo (`~/.aralia-deploy/bin/deploy.sh`) que se actualiza tras cada despliegue verificado; `REVIEW_GENESIS` = commit inicial; `rollback`; `build/` y componentes con lista blanca; destinos y protección de `main` exigidos, con `ALLOW_*` registrados; T166 y T167; RR-8 a RR-10 | `ops/deploy.sh`, threat-model §3, constitución 1.2.0 (propuesta) |
+| Gates T0 de la Fase 1, vuelta 5 (architect, security, code-reviewer) | Lista cerrada de terceros `ops/third-party.lock` comprobada antes de copiar y con huella `tp=` igual a la de staging; la puerta exige el commit de fusión firmado por GitHub; código propio retirado se borra del servidor; ssh sin reenvío de agente; paquete y `build/` endurecidos | `ops/deploy.sh`, `ops/third-party.lock`, threat-model v1.3 (RR-11 a RR-14), T169 a T171 |
+| Gates T0 de la Fase 1, vuelta 6 (architect, security, code-reviewer) | Destino sin enlaces simbólicos antes de `--delete`; el paquete debe traer todo el código propio de git; inventario de terceros por archivos (plugins, temas, mu-plugins, drop-ins) y activos obligatorios; núcleo `7.1.*`; rollback contra el lock del último despliegue verificado; comprobación repetida tras copiar; producción exige `baseline check`; `build/` sin mayúsculas ni `.php5`; guard con cargador `aralia-wompi-guard.php` (N5) | `ops/deploy.sh` (239 pruebas), `ops/third-party.lock`, constitución 1.2.0 (puntos 7 y 8), T170 |
 
 ### Iteración 2 — respuesta a la revisión de arquitectura (iteración 1)
 
