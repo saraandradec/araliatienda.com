@@ -14,6 +14,11 @@ updates:
     ignore:
       # Fijado a 3.2.1: cualquier cambio pasa por el contrato del guard y la revisora humana (D-01, R-15).
       - dependency-name: "wpackagist-plugin/wompi-portal-de-pagos"
+      # Las versiones de WooCommerce/Wordfence/LiteSpeed/WordPress las fija ops/third-party.lock tras probarlas en staging (T168):
+      # un PR de Dependabot en composer.lock desalinearía lo probado en CI de lo instalado en Hostinger.
+      - dependency-name: "wpackagist-plugin/woocommerce"
+      - dependency-name: "wpackagist-plugin/wordfence"
+      - dependency-name: "roots/wordpress-no-content"
 
   - package-ecosystem: npm
     directory: "/E-commerce"

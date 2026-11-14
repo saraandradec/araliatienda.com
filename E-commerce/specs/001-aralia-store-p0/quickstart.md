@@ -40,6 +40,6 @@ npx lhci autorun          # Lighthouse
 6. Rechazo en Sandbox → "Intentar con otro medio" → nueva referencia `<id>-2` (T-PAY-RETRY).
 7. Dejar vencer un pedido → "Volver a mi carrito" (T-CART-BACK).
 
-**Staging / producción**: despliegue **local** con `ops/deploy.sh staging|production <sha>` desde el equipo de Sara (no por GitHub Actions; ver research R-15). Requiere `brew install rsync gh`, `ops/deploy.conf` y un CI en verde sobre `main`. Procedimiento completo en `ops/runbooks/deploy.md`.
+**Staging / producción**: despliegue **local** con `~/.aralia-deploy/bin/deploy.sh staging|production <sha>` (lanzador de confianza, fuera del repo) desde el equipo de Sara (no por GitHub Actions; ver research R-15). Requiere `brew install rsync gh`, `~/.aralia-deploy/deploy.conf` (modo 600) y un CI en verde sobre `main`. Procedimiento completo en `ops/runbooks/deploy.md`.
 
 **Nota Docker (macOS/arm64)**: si `npx wp-env start` falla en `apt-get install git` con `chgrp: invalid group '_ssh'`, ver `ops/inventory.md` (Entorno local).

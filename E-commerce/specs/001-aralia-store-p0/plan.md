@@ -93,11 +93,11 @@ E-commerce/
 │   │   │   ├── Privacy/              # Consentimientos, cifrado PII, derechos de la titular, purgas, anonimización de staging
 │   │   │   └── Cache/                # CacheInvalidator (transients + purga LiteSpeed/CDN por etiqueta)
 │   │   ├── assets/                   # dane-municipios.json, checkout-turnstile.js
-│   │   ├── blocks/                   # Carrito lateral, set card, Full face, selector de tono, constructor de neceser, barra superior, Cómo llega
+│   │   ├── blocks/                   # (fuente; NO viaja en el paquete: se compila a build/) Carrito lateral, set card, Full face, selector de tono, constructor de neceser, barra superior, Cómo llega
 │   │   └── migrations/               # Tablas aralia_* versionadas
 │   └── mu-plugins/
 │       ├── aralia-wompi-guard/       # Llaves, TLS, order-pay propio, manejador de eventos, conciliación, neutralización de wc-voided (H13), prueba de contrato
-│       └── aralia-hardening.php      # DISALLOW_FILE_EDIT/MODS, sin XML-RPC, sin enumeración de usuarios, uploads sin PHP
+│       └── aralia-hardening.php      # DISALLOW_FILE_EDIT (sin DISALLOW_FILE_MODS: se actualiza desde wp-admin), sin XML-RPC, sin enumeración de usuarios, uploads sin PHP
 ├── tests/php/{unit,integration,contract}/ · tests/e2e/ · tests/load/ (k6) · tests/fixtures/ (eventos Wompi firmados, CSV)
 ├── tools/script-monitor/             # Scripts, hashes inline, contenido de widget.js, cabeceras
 └── ops/
@@ -270,4 +270,4 @@ E-commerce/
 | Vencimiento de pedidos propio | La cancelación nativa de WC no cumple FR-056 (R-06) | La reserva nativa vence sin consultar a Wompi |
 | Búsqueda propia | "corectol" → "corrector" (distancia 2) | Los plugins no la cubren sin un servicio externo |
 | 6 tablas propias | Idempotencia, consentimientos, auditoría, avisos y límites atómicos | Post meta no da unicidad ni atomicidad |
-| `ops/deploy.sh` (~700 líneas propias, con ~170 pruebas) | GitHub Free no protege environments ni ramas; una llave SSH en GitHub quedaría al alcance de cualquier rama (R-15, enmienda 1.1.0) | Actions + environment de producción: no existe en el plan Free. GitHub Pro/Team lo resolvería: es condición de la primera salida a producción (`deploy.sh` se niega sin protección de rama; T166) |
+| `ops/deploy.sh` (~650 líneas propias, con ~210 pruebas) | GitHub Free no protege environments ni ramas; una llave SSH en GitHub quedaría al alcance de cualquier rama (R-15, enmienda 1.1.0) | Actions + environment de producción: no existe en el plan Free. GitHub Pro/Team lo resolvería: es condición de la primera salida a producción (`deploy.sh` se niega sin protección de rama; T166) |

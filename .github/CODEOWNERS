@@ -6,7 +6,7 @@
 # aprobado por una persona de la lista de ops/payment-reviewers.txt del último despliegue, distinta de la autora.
 # Hoy esa lista está vacía, así que producción queda bloqueada hasta que la revisora revise lo hecho.
 #
-# Al contratarla: agregar su usuario en las líneas marcadas [PAGO] y en ops/payment-reviewers.txt.
+# Al contratarla: agregar su usuario en la línea `*` (la revisión cubre TODO el repo salvo specs/ e ops/inventory.md), en las líneas [PAGO] y en ops/payment-reviewers.txt.
 # GitHub exige que tenga permiso Write en el repo para figurar aquí (ops/runbooks/access.md).
 # La última coincidencia gana: las reglas generales van arriba y las específicas abajo.
 

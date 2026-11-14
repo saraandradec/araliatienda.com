@@ -1,8 +1,8 @@
 # Threat Model (STRIDE) — Aralía Beauty Store P0
 
-**Feature**: [spec.md](./spec.md) · **Tier**: T0 · **Fecha**: 2026-11-03 · **Versión**: 1.2
+**Feature**: [spec.md](./spec.md) · **Tier**: T0 · **Fecha**: 2026-11-03 · **Versión**: 1.3
 **Método**: STRIDE por límite de confianza, sobre el diseño decidido (tienda WooCommerce, pago con el **widget alojado por Wompi** abierto desde la página order-pay de la tienda, eventos procesados por `aralia-wompi-guard`, una administradora).
-**Cambios v1.2**: H13 (anulación desde el panel neutralizada), límite de rechazos por origen, intentos paralelos, RR-6 y RR-7. **Cambios v1.1**: el pago es por widget (no redirección) tras verificar el código del plugin (research R-01); LC-4, T-2 y RR-4 actualizados; nuevas amenazas T-10, T-11, S-7; controles alineados con research v2.
+**Cambios v1.3 (2026-11-13)**: RR-8 a RR-14 (despliegue local, solo código propio, terceros por Hostinger/wp-admin; ver `ops/runbooks/deploy.md`). **Cambios v1.2**: H13 (anulación desde el panel neutralizada), límite de rechazos por origen, intentos paralelos, RR-6 y RR-7. **Cambios v1.1**: el pago es por widget (no redirección) tras verificar el código del plugin (research R-01); LC-4, T-2 y RR-4 actualizados; nuevas amenazas T-10, T-11, S-7; controles alineados con research v2.
 
 ---
 
@@ -149,10 +149,14 @@ Escala: Probabilidad (B/M/A) × Impacto (B/M/A). **Control** = requisito del spe
 | RR-8 | El registro de despliegues (`~/.aralia-deploy/*.log`) y el lanzador viven en el equipo de Sara: quien controle su usuario puede falsear "último despliegue" o sustituir el lanzador | Permisos 700 y comprobación de 022 del lanzador; cada despliegue anota `launcher=<sha256>` y los `ALLOW_*` vigentes; sin protección de rama el riesgo sube | Al activar GitHub Pro/Team (T166) y en cada revisión semestral |
 | RR-9 | Un merge hecho en local con cambios extra hereda la aprobación del PR (git no garantiza que el árbol fusionado sea el aprobado) | Fusionar siempre con *squash*; protección de rama con "branch up to date" cuando exista (T166) | Al activar GitHub Pro/Team |
 | RR-10 | WordPress y los plugins de terceros los instala y actualiza Hostinger/wp-admin: una actualización maliciosa o rota, o un plugin añadido sin revisar, llega al sitio sin pasar por el pipeline; el JS de `build/` tampoco se verifica contra una fuente independiente | Una sola administradora con 2FA; lista cerrada en `ops/inventory.md`; Wompi sin actualización automática y con prueba de contrato; copia previa y staging antes de actualizar; `wp core/plugin verify-checksums` tras cada despliegue; Wordfence; `build/` restringido a tipos no ejecutables (T167 y T168) | Al completar T167/T168; PCI 6.3.3 y 6.4.3/11.6.1 para scripts de la página de pago |
+| RR-11 | wp-admin/hPanel es un canal de código sin revisión (sesión de administradora comprometida) y los terceros pueden derivar entre despliegues; los mu-plugins y drop-ins de Hostinger corren en el mismo proceso que el guard | 2FA; lista cerrada y versiones exactas comprobadas en cada despliegue (`ops/third-party.lock`); Wordfence; T170 (comprobación periódica con alerta y guard que falla cerrado si la versión de Wompi no está en la lista) | Al completar T170 |
+| RR-12 | El `rsync` no es atómico: `aralia-core` y el guard pueden quedar un instante en versiones distintas | Desplegar fuera de horas de pago con el medio de pago oculto (modo mantenimiento) | Al contar con despliegue atómico |
+| RR-13 | Las comprobaciones posteriores al despliegue corren dentro del código recién desplegado | Las de terceros corren antes de copiar y con `--skip-plugins --skip-themes` | Permanente (aceptado) |
+| RR-14 | Secretos Sandbox accesibles a PR de ramas del mismo repo en el CI; la revisora se identifica solo por su login de GitHub | Solo llaves Sandbox; registrar nombre real y evidencia de identidad de la revisora en `ops/compliance/` | Al activar environments (GitHub Pro/Team) |
 
 ---
 
-**Aceptación de riesgos residuales**: **RR-8 a RR-10 (2026-11-13) están PROPUESTOS: su aceptación por Sara Andrade queda pendiente de registrar en el ledger.** RR-1 a RR-7 aceptados explícitamente por **Sara Andrade** (responsable de Aralía) el **2026-11-03**, durante la planificación (logiplan, iteración 3 del plan). También se decidió exigir revisión humana en cada cambio posterior del camino de pago, por lo que no hay riesgo residual por revisión, salvo los RR-8 a RR-10 de la Fase 1. Revisión de los riesgos: anual o al cumplirse su disparador.
+**Aceptación de riesgos residuales**: **RR-8 a RR-14 (2026-11-13) están PROPUESTOS: su aceptación por Sara Andrade queda pendiente de registrar en el ledger.** RR-1 a RR-7 aceptados explícitamente por **Sara Andrade** (responsable de Aralía) el **2026-11-03**, durante la planificación (logiplan, iteración 3 del plan). También se decidió exigir revisión humana en cada cambio posterior del camino de pago, por lo que no hay riesgo residual por revisión, salvo los RR-8 a RR-14 de la Fase 1. Revisión de los riesgos: anual o al cumplirse su disparador.
 
 ## 4. Requisitos de seguridad derivados para el plan
 

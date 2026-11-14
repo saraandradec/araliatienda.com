@@ -1,0 +1,17 @@
+# Lista cerrada de lo que Hostinger/wp-admin instala (research R-15, constitución 1.2.0). ops/deploy.sh la lee DEL COMMIT que se
+# despliega y, antes de copiar nada, falla si el servidor tiene algo que no esté aquí o con otra versión.
+# Formato (una entrada por línea):
+#   core    <versión>                 WordPress
+#   plugin  <slug> <versión|any>      "any" solo para lo que no se puede fijar (UpdraftPlus Premium, instalación manual)
+#   mu      <nombre>                  mu-plugins ajenos (los aralia-* son código propio y no se listan)
+#   dropin  <archivo>                 drop-ins de wp-content (advanced-cache.php, object-cache.php)
+# Cambiar una versión = PR aprobado + probar en staging (T168). Mantener igual que ops/inventory.md y composer.json.
+core 7.1.4
+plugin woocommerce 11.2.1
+plugin wompi-portal-de-pagos 3.2.1
+plugin wordfence 9.0.2
+plugin litespeed-cache 7.9.2
+plugin updraftplus any
+# ☐ T012: al contratar Hostinger, ejecutar `wp plugin list --status=must-use` y `--status=dropin` y registrar aquí lo que
+# inyecta el hosting (p. ej. mu hostinger-tools, dropin advanced-cache.php, dropin object-cache.php) con su justificación
+# en ops/inventory.md. Hasta entonces el despliegue falla cerrado si aparece algo no listado.

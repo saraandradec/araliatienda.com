@@ -71,5 +71,3 @@ updraft/
 /wp-content/mu-plugins/aralia-secrets*.php
 !/wp-content/mu-plugins/aralia-secrets-loader.php
 
-# Copia del deploy.sh del último despliegue (ops/runbooks/deploy.md)
-ops/deploy.last.sh

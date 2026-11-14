@@ -24,21 +24,23 @@
 #      venga de un PR fusionado en main y aprobado, sobre su último commit, por alguien de la lista de revisoras
 #      DISTINTO de la autora. La lista se lee del último despliegue a producción (no del commit a desplegar);
 #      el alta de la primera revisora exige una confirmación escrita de Sara (ALTA-REVISORA);
-#   5. una simulación (rsync -n) que Sara revisa y confirma.
+#   5. los terceros del servidor (núcleo, plugins, mu-plugins, drop-ins y versiones) coinciden con ops/third-party.lock
+#      del commit, y en producción con los que se probaron en staging para ese SHA;
+#   6. una simulación (rsync -n) que Sara revisa y confirma.
 # Solo despliega CÓDIGO PROPIO: el plugin aralia-core, el tema aralia y los mu-plugins aralia-*, cada uno con --delete
 # acotado a sí mismo. WordPress, WooCommerce, Wompi, Wordfence y LiteSpeed los instala y actualiza Hostinger/wp-admin;
 # nunca se tocan, ni .htaccess, .user.ini, wordfence-waf.php, .well-known, wp-config.php, uploads, wflogs,
 # caché de LiteSpeed, idiomas, updraft ni UpdraftPlus.
 #
-# Configuración (no secreta, ignorada por git): ops/deploy.conf, a partir de ops/deploy.conf.sample.
+# Configuración (no secreta, fuera del repositorio, modo 600): ~/.aralia-deploy/deploy.conf, a partir de ops/deploy.conf.sample.
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 SELF="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"     # E-commerce/
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd -P)"     # E-commerce/
 PROJECT_REL="E-commerce"
-REPO_ROOT="$(cd "$PROJECT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$PROJECT_DIR/.." && pwd -P)"
 # Compatible con el bash 3.2 de macOS (sin mapfile ni arrays asociativos).
 
 # Plugins de terceros que se instalan y actualizan en Hostinger (lista cerrada, R-15). Este script NO los despliega ni
@@ -126,9 +128,12 @@ package_release() {
 # ------------------------------------------------------------------------------------------------- sync
 
 # Ejecuta un comando en el destino ("" = local, para las pruebas).
+# ssh nunca reenvía el agente (el código de staging, sin revisión de producción, no debe poder usar la llave de producción).
+SSH_OPTS="-o StrictHostKeyChecking=yes -o ForwardAgent=no -o ClearAllForwardings=yes -o BatchMode=yes"
 on_target() {
 	local host="$1"; shift
-	if [ -z "$host" ]; then bash -c "$*"; else ssh -o StrictHostKeyChecking=yes "$host" "$*"; fi
+	# shellcheck disable=SC2086  # SSH_OPTS son opciones separadas a propósito
+	if [ -z "$host" ]; then bash -c "$*"; else ssh $SSH_OPTS "$host" "$*"; fi
 }
 
 # Copia el paquete extraído ($1) a la raíz de WordPress del destino. $2 host ("" local), $3 ruta, $4 "-n" para simular.
@@ -145,7 +150,7 @@ sync_release() {
 	# --checksum: compara contenido, no tamaño+hora (un archivo con igual tamaño y hora no se saltaría).
 	local -a R=(rsync -rlptz --checksum --chmod='D755,F644' --itemize-changes)
 	[ "$dry" = "-n" ] && R+=(-n)
-	export RSYNC_RSH="ssh -o StrictHostKeyChecking=yes"
+	export RSYNC_RSH="ssh $SSH_OPTS"
 
 	# Solo código propio, cada pieza con --delete acotado a sí misma. Cada orden termina en "|| return 1":
 	# dentro de una función llamada con "|| die", bash ignora set -e.
@@ -159,7 +164,33 @@ sync_release() {
 		n="wp-content/mu-plugins/$(basename "$d")"
 		if [ -d "$d" ]; then "${R[@]}" --delete "$d/" "$dest/$n/" || return 1; else "${R[@]}" "$d" "$dest/$n" || return 1; fi
 	done
+	remove_orphans "$src" "$host" "$path" "$dry" || return 1
 	return 0
+}
+
+# Código propio que ya no viaja en el paquete (mu-plugin renombrado o retirado, rollback a un SHA anterior al componente)
+# se borra del destino: un mu-plugin viejo seguiría ejecutándose. Solo nombres aralia-* validados; con -n solo se lista.
+remove_orphans() {
+	local src="$1" host="$2" path="$3" dry="${4:-}" listing name rel
+	listing="$(on_target "$host" "ls -1 '$path/wp-content/mu-plugins' 2>/dev/null | grep '^aralia-' || true")" || return 1
+	while IFS= read -r name; do
+		[ -n "$name" ] || continue
+		[[ "$name" =~ ^aralia-[A-Za-z0-9._-]+$ ]] || return 1
+		[ -e "$src/wp-content/mu-plugins/$name" ] && continue
+		orphan_delete "$host" "$path" "wp-content/mu-plugins/$name" "$dry" || return 1
+	done <<<"$listing"
+	for rel in wp-content/plugins/aralia-core wp-content/themes/aralia; do
+		[ -e "$src/$rel" ] && continue
+		on_target "$host" "test -e '$path/$rel'" 2>/dev/null || continue
+		orphan_delete "$host" "$path" "$rel" "$dry" || return 1
+	done
+	return 0
+}
+
+orphan_delete() {
+	local host="$1" path="$2" rel="$3" dry="$4"
+	if [ "$dry" = "-n" ]; then printf '*deleting   %s (huérfano: ya no está en el paquete)\n' "$rel"; return 0; fi
+	on_target "$host" "rm -rf '$path/$rel'" || return 1
 }
 
 # ---------------------------------------------------------------------------------------------- deploy
@@ -231,7 +262,7 @@ check_destinations() {
 check_production_prereqs() {
 	local prot
 	gh auth status >/dev/null 2>&1 || die "gh no tiene sesión (gh auth login)"
-	prot="$(gh api "repos/$REPO/branches/main/protection" --jq '((.required_pull_request_reviews != null) and (.allow_force_pushes.enabled == false))' 2>/dev/null || true)"
+	prot="$(gh api "repos/$REPO/branches/main/protection" --jq '((.required_pull_request_reviews.required_approving_review_count >= 1) and (.enforce_admins.enabled == true) and (.allow_force_pushes.enabled == false))' 2>/dev/null || true)"
 	if [ "$prot" != true ]; then
 		[ "$ALLOW_UNPROTECTED_MAIN" = yes ] \
 			|| die "La rama main no exige PR con revisión ni bloquea el force-push (GitHub Pro/Team). Actívalo o, bajo tu responsabilidad, ALLOW_UNPROTECTED_MAIN=\"yes\" en deploy.conf"
@@ -243,10 +274,14 @@ check_production_prereqs() {
 # Solo se ejecuta el lanzador de confianza, fuera del repositorio y sin permisos de escritura para otros.
 require_trusted_launcher() {
 	local mode
-	[ "$SCRIPT_DIR" = "$TRUSTED_DIR" ] \
+	[ "$SCRIPT_DIR" = "$(cd "$TRUSTED_DIR" 2>/dev/null && pwd -P)" ] \
 		|| die "Ejecuta el lanzador de confianza $TRUSTED_DIR/deploy.sh, no el script del árbol de trabajo (ops/runbooks/deploy.md, «Instalar el lanzador»)"
 	mode="$(file_mode "$SELF")"
 	[ $((8#$mode & 8#022)) -eq 0 ] || die "El lanzador no debe tener permisos de escritura para grupo u otros (chmod 700 $SELF)"
+	[ ! -L "$SELF" ] && [ ! -L "$TRUSTED_DIR" ] || die "El lanzador y su directorio no pueden ser enlaces simbólicos"
+	[ -O "$SELF" ] && [ -O "$TRUSTED_DIR" ] || die "El lanzador y su directorio deben pertenecer a tu usuario"
+	mode="$(file_mode "$TRUSTED_DIR")"
+	[ $((8#$mode & 8#022)) -eq 0 ] || die "$TRUSTED_DIR no debe tener permisos de escritura para grupo u otros (chmod 700)"
 	return 0
 }
 
@@ -282,10 +317,15 @@ check_source() {
 # El código propio del paquete debe ser idéntico al del árbol de git en <sha>, sin extras. El CI genera el paquete
 # y su SHA-256: el hash solo prueba integridad del transporte, no autenticidad.
 verify_own_code() {
-	local sha="$1" dir="$2" x="$2/x" rel name e n=0 gdir cdir f ok
+	local sha="$1" dir="$2" x="$2/x" rel name e n=0 gdir cdir f ok base stem
 	local asset_re="^<\\?php return array\\('dependencies' => array\\(('[a-z0-9@/._-]+'(, )?)*\\), 'version' => '[a-z0-9]+'\\);[[:space:]]*\$"
-	mkdir -p "$dir/git" "$dir/cmp"
+	# Directorios de trabajo nuevos: si el artefacto los trajera prellenados, la comparación se podría falsear.
+	[ -d "$x" ] || die "Falta $x"
+	mkdir "$dir/git" "$dir/cmp" 2>/dev/null || die "Directorios de trabajo de la verificación ya existen: se rechaza el paquete"
 	[ -z "$(find "$x" -type l)" ] || die "El paquete contiene enlaces simbólicos"
+	# .gitkeep solo como archivo vacío (package_release los borra; no viajan al servidor).
+	[ -z "$(find "$x" -name .gitkeep \( ! -type f -o -size +0c \))" ] || die ".gitkeep con contenido o que no es un archivo"
+	find "$x" -type f -name .gitkeep -delete
 
 	# 1. Lista blanca exacta de componentes y nombres seguros: solo código propio que exista en git; el resto lo instala Hostinger.
 	for e in "$x"/wp-content/plugins/* "$x"/wp-content/themes/* "$x"/wp-content/mu-plugins/*; do
@@ -318,11 +358,15 @@ verify_own_code() {
 		# una línea con la forma que genera @wordpress/scripts (sin llamadas a funciones).
 		if [ -d "$cdir/build" ]; then
 			while IFS= read -r f; do
-				case "$f" in
-					*.js|*.css|*.json|*.map|*.svg|*.png|*.jpg|*.woff2) ;;
+				base="$(basename "$f")"
+				# Ninguna extensión ejecutable en medio del nombre (x.php.js, x.phtml.map…) salvo la terminación exacta .asset.php.
+				stem="${base%.asset.php}"
+				if [[ "$stem" =~ \.(php|phtml|phar|pht)([.]|$) ]] || [[ "$stem" =~ ^\.|^$ ]]; then die "build/ con nombre no permitido: $f"; fi
+				case "$base" in
 					*.asset.php)
+						[[ "$base" =~ ^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*\.asset\.php$ ]] || die "build/ con nombre no permitido: $f"
 						{ [ "$(grep -c '' "$f")" -eq 1 ] && grep -Eq "$asset_re" "$f"; } || die "build/ con PHP no permitido: $f" ;;
-					*) die "build/ con archivo no permitido: $f" ;;
+					*) [[ "$base" =~ ^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*\.(js|css|json|map|png|jpg|woff2)$ ]] || die "build/ con archivo no permitido: $f" ;;
 				esac
 			done < <(find "$cdir/build" -type f)
 			rm -rf "$cdir/build"
@@ -340,6 +384,7 @@ verify_own_code() {
 	for e in "$x"/wp-content/mu-plugins/*; do
 		[ -e "$e" ] || continue; name="$(basename "$e")"
 		git -C "$REPO_ROOT" archive "$sha" "$PROJECT_REL/wp-content/mu-plugins/$name" | tar -x -C "$dir/git"
+		find "$dir/git/$PROJECT_REL/wp-content/mu-plugins/$name" -type f -name .gitkeep -delete
 		diff -r "$dir/git/$PROJECT_REL/wp-content/mu-plugins/$name" "$e" >/dev/null || die "El paquete difiere del árbol de git en mu-plugins/$name"
 		n=$((n+1))
 	done
@@ -353,7 +398,12 @@ fetch_release() {
 	run_id="$(gh run list -R "$REPO" --workflow ecommerce-ci.yml --commit "$sha" --branch main --event push \
 		--json databaseId,conclusion --jq 'map(select(.conclusion=="success"))[0].databaseId // empty')" || die "No se pudo consultar el CI (gh auth status)"
 	[ -n "$run_id" ] || die "No hay un CI en verde para $sha en main"
-	gh run download "$run_id" -R "$REPO" -n "release-$sha" -D "$dir" >/dev/null || die "No se pudo descargar el paquete del CI"
+	# El artefacto se descarga a un directorio aparte y solo se adoptan sus dos archivos esperados.
+	mkdir "$dir/dl" || die "No se pudo crear el directorio de descarga"
+	gh run download "$run_id" -R "$REPO" -n "release-$sha" -D "$dir/dl" >/dev/null || die "No se pudo descargar el paquete del CI"
+	[ -f "$dir/dl/aralia-$sha.tar.gz" ] && [ -f "$dir/dl/aralia-$sha.tar.gz.sha256" ] || die "El artefacto del CI no trae el paquete y su SHA-256"
+	[ ! -L "$dir/dl/aralia-$sha.tar.gz" ] && [ ! -L "$dir/dl/aralia-$sha.tar.gz.sha256" ] || die "El artefacto del CI trae enlaces"
+	cp "$dir/dl/aralia-$sha.tar.gz" "$dir/dl/aralia-$sha.tar.gz.sha256" "$dir/"
 	unpack_release "$sha" "$dir"
 	verify_own_code "$sha" "$dir"
 	info "CI $run_id en verde; paquete verificado"
@@ -361,14 +411,19 @@ fetch_release() {
 
 # Verifica el SHA-256 y el MANIFEST de $dir/aralia-<sha>.tar.gz y lo extrae en $dir/x.
 unpack_release() {
-	local sha="$1" dir="$2" expected actual
+	local sha="$1" dir="$2" expected actual types names
 	expected="$(cut -d' ' -f1 < "$dir/aralia-$sha.tar.gz.sha256")"
 	actual="$(sha256_of "$dir/aralia-$sha.tar.gz")"
 	[ "$expected" = "$actual" ] || die "SHA-256 del paquete no coincide"
 	# Antes de extraer: solo archivos y directorios (nada de enlaces simbólicos/duros ni dispositivos) y sin rutas absolutas ni "..".
-	if tar -tvzf "$dir/aralia-$sha.tar.gz" | cut -c1 | grep -q '[^-d]'; then die "El paquete contiene entradas que no son archivos ni directorios"; fi
-	if tar -tzf "$dir/aralia-$sha.tar.gz" | grep -Eq '(^|/)\.\.(/|$)|^/'; then die "El paquete contiene rutas absolutas o con .."; fi
-	mkdir -p "$dir/x" && tar -xzf "$dir/aralia-$sha.tar.gz" -C "$dir/x"
+	# Se captura la salida completa antes de buscar: con pipefail, `grep -q` cortaría la tubería (SIGPIPE) y un tar grande
+	# con una entrada maliciosa pasaría por "sin coincidencia".
+	types="$(tar -tvzf "$dir/aralia-$sha.tar.gz" | cut -c1)" || die "No se pudo leer el paquete"
+	names="$(tar -tzf "$dir/aralia-$sha.tar.gz")" || die "No se pudo leer el paquete"
+	if grep -q '[^-d]' <<<"$types"; then die "El paquete contiene entradas que no son archivos ni directorios"; fi
+	if grep -Eq '(^|/)\.\.(/|$)|^/' <<<"$names"; then die "El paquete contiene rutas absolutas o con .."; fi
+	mkdir "$dir/x" 2>/dev/null || die "$dir/x ya existe"
+	tar -xzf "$dir/aralia-$sha.tar.gz" -C "$dir/x"
 	grep -qx "sha=$sha" "$dir/x/MANIFEST" || die "El MANIFEST no corresponde a $sha"
 	return 0
 }
@@ -381,7 +436,7 @@ reviewers_at() {
 
 # Puerta de revisión independiente (CM ítem 11, PCI 6.2.3).
 check_payment_reviews() {
-	local sha="$1" last base range trusted new reviewers c prs ok n author head r answer commits_raw owner prauthors reviews
+	local sha="$1" last base range trusted new reviewers c prs ok n author head r answer commits_raw owner prauthors reviews signed
 	owner="$(echo "${REPO%%/*}" | tr 'A-Z' 'a-z')"
 	last="$(last_deployed production)"
 	if [ -n "$last" ]; then
@@ -423,9 +478,14 @@ check_payment_reviews() {
 	fi
 
 	for c in "${commits[@]}"; do
-		prs="$(gh api "repos/$REPO/commits/$c/pulls" --jq '.[] | select(.merged_at != null and .base.ref == "main") | "\(.number) \(.user.login)"')" \
+		# El commit debe ser EL commit de fusión (squash) que creó GitHub para el PR aprobado: un merge local con código
+		# añadido después de la aprobación no cumple ninguna de las dos condiciones.
+		prs="$(gh api "repos/$REPO/commits/$c/pulls" --jq ".[] | select(.merged_at != null and .base.ref == \"main\" and .merge_commit_sha == \"$c\") | \"\\(.number) \\(.user.login)\"")" \
 			|| die "No se pudo consultar los PR del commit $c (gh auth status)"
-		[ -n "$prs" ] || die "Commit $c sin PR fusionado en main (push directo)"
+		[ -n "$prs" ] || die "Commit $c sin PR fusionado en main con ese commit como resultado de la fusión (push directo o merge local)"
+		signed="$(gh api "repos/$REPO/commits/$c" --jq '((.committer.login // "") == "web-flow") and (.commit.verification.verified == true)')" \
+			|| die "No se pudo consultar el commit $c"
+		[ "$signed" = true ] || die "Commit $c no fue creado y firmado por GitHub (merge desde la web, squash): ¿merge local?"
 		ok=false
 		while read -r n author; do
 			[ -n "$n" ] || continue
@@ -453,6 +513,59 @@ check_payment_reviews() {
 	info "Revisión humana verificada en ${#commits[@]} commit(s)"
 }
 
+sha256_stdin() { if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi; }
+
+# Lo instalado por Hostinger/wp-admin (núcleo, plugins, mu-plugins, drop-ins) debe coincidir con ops/third-party.lock DEL COMMIT
+# que se despliega (lista cerrada y versiones exactas; "any" = cualquier versión, p. ej. UpdraftPlus Premium). Se comprueba ANTES
+# de copiar y con --skip-plugins --skip-themes, para que ningún código del servidor se certifique a sí mismo.
+# Deja en TP_HASH la huella de lo encontrado: producción exige la misma que staging tuvo para ese SHA.
+TP_HASH=""
+check_third_party() {
+	local sha="$1" host="$2" path="$3" manifest out core_v list norm name status ver au
+	manifest="$(git -C "$REPO_ROOT" show "$sha:$PROJECT_REL/ops/third-party.lock" 2>/dev/null | sed 's/#.*//' | awk 'NF')" || true
+	[ -n "$manifest" ] || die "Falta ops/third-party.lock en $sha (lista cerrada de terceros y versiones)"
+	out="$(on_target "$host" "cd '$path' && wp core verify-checksums --skip-plugins --skip-themes 2>&1")" || die "wp core verify-checksums falló: $out"
+	if grep -qi 'warning' <<<"$out"; then die "wp core verify-checksums con avisos: $out"; fi
+	core_v="$(on_target "$host" "cd '$path' && wp core version --skip-plugins --skip-themes")" || die "No se pudo leer la versión de WordPress"
+	grep -qxF "core $core_v" <<<"$manifest" || die "WordPress $core_v no coincide con ops/third-party.lock de $sha"
+	out="$(on_target "$host" "cd '$path' && wp plugin verify-checksums ${THIRD_PARTY_PLUGINS[*]} --skip-plugins --skip-themes 2>&1")" || die "wp plugin verify-checksums falló: $out"
+	if grep -qi 'warning' <<<"$out"; then die "wp plugin verify-checksums con avisos: $out"; fi
+	list="$(on_target "$host" "cd '$path' && wp plugin list --fields=name,status,version,auto_update --format=csv --skip-plugins --skip-themes")" || die "No se pudo listar los plugins"
+	norm="core $core_v"$'\n'
+	while IFS=, read -r name status ver au; do
+		{ [ -n "$name" ] && [ "$name" != name ]; } || continue
+		[[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || die "Nombre de plugin no permitido en el servidor: $name"
+		case "$status" in
+			must-use)
+				[[ "$name" == aralia-* ]] && continue
+				grep -qxF "mu $name" <<<"$manifest" || die "mu-plugin no inventariado en el servidor: $name (añádelo a ops/third-party.lock con su justificación o retíralo)"
+				norm="${norm}mu $name"$'\n' ;;
+			dropin)
+				grep -qxF "dropin $name" <<<"$manifest" || die "drop-in no inventariado en el servidor: $name"
+				norm="${norm}dropin $name"$'\n' ;;
+			*)
+				[ "$name" = aralia-core ] && continue
+				grep -qxF "plugin $name $ver" <<<"$manifest" || grep -qxF "plugin $name any" <<<"$manifest" \
+					|| die "Plugin $name $ver no coincide con ops/third-party.lock de $sha (instalado: lista cerrada y versión exacta)"
+				if [ "$name" = wompi-portal-de-pagos ] && [ "$au" != off ]; then
+					die "Wompi tiene la actualización automática activada (auto_update=$au): desactívala en wp-admin y en hPanel"
+				fi
+				norm="${norm}plugin $name $ver"$'\n' ;;
+		esac
+	done <<<"$list"
+	TP_HASH="$(printf '%s' "$norm" | sort | sha256_stdin)"
+	info "Terceros del servidor conformes con ops/third-party.lock (huella ${TP_HASH:0:12})"
+}
+
+# Producción solo recibe un SHA cuyos terceros fueron, en staging, EXACTAMENTE los que hay ahora en producción.
+staging_tp_matches() {
+	local sha="$1" f stg
+	f="$(deploy_log staging)"
+	stg="$(awk -v s="$sha" '$2==s && $4=="verified" { for (i=5;i<=NF;i++) if ($i ~ /^tp=/) t=substr($i,4) } END { print t }' "$f" 2>/dev/null || true)"
+	[ -n "$stg" ] || die "El registro de staging de $sha no trae la huella de terceros (tp=): vuelve a desplegarlo en staging"
+	[ "$stg" = "$TP_HASH" ] || die "Los terceros de producción difieren de los probados en staging para $sha (huella $TP_HASH, staging $stg)"
+}
+
 verify_target() {
 	local target="$1" host="$2" path="$3" baseline
 	if [ "$target" = production ]; then
@@ -460,7 +573,7 @@ verify_target() {
 	else
 		baseline="if wp cli has-command 'aralia baseline'; then wp aralia baseline check; else echo 'aviso: baseline check aún no existe (fase 2)'; fi"
 	fi
-	on_target "$host" "cd '$path' && wp core verify-checksums && wp plugin verify-checksums ${THIRD_PARTY_PLUGINS[*]} && $baseline"
+	on_target "$host" "cd '$path' && $baseline"
 }
 
 DEPLOY_TMP=""
@@ -469,6 +582,8 @@ cleanup() { [ -n "$DEPLOY_TMP" ] && rm -rf "$DEPLOY_TMP"; return 0; }
 # Simulación, confirmación, copia, verificación y registro (compartido por deploy y rollback).
 apply_release() {
 	local target="$1" sha="$2" tmp="$3" host="$4" path="$5" kind="$6" confirm="$7" answer nchanges ndel flags=""
+	check_third_party "$sha" "$host" "$path"
+	if [ "$target" = production ] && [ "$kind" = verified ]; then staging_tp_matches "$sha"; fi
 	info "Simulación en $target ($host:$path):"
 	sync_release "$tmp/x" "$host" "$path" -n > "$tmp/dry-run.txt" || die "La simulación falló (ruta, ssh o rsync); no se despliega nada"
 	nchanges="$(grep -vc '^\.' "$tmp/dry-run.txt" || true)"
@@ -490,8 +605,8 @@ apply_release() {
 	# Las aceptaciones de riesgo vigentes quedan escritas junto al despliegue.
 	[ "$ALLOW_SHARED_STAGING" = yes ] && flags="$flags ALLOW_SHARED_STAGING"
 	[ "$ALLOW_UNPROTECTED_MAIN" = yes ] && flags="$flags ALLOW_UNPROTECTED_MAIN"
-	printf '%s %s %s %s launcher=%s allow=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$sha" "$(git config user.email || whoami)" "$kind" \
-		"$(sha256_of "$SELF")" "${flags# }" >> "$(deploy_log "$target")"
+	printf '%s %s %s %s launcher=%s allow=%s tp=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$sha" "$(git config user.email || whoami)" "$kind" \
+		"$(sha256_of "$SELF")" "${flags# }" "$TP_HASH" >> "$(deploy_log "$target")"
 	info "Desplegado y verificado en $target ($kind): $sha"
 	if [ "$target" = production ] && [ "$kind" = verified ]; then install_launcher "$sha"; fi
 	return 0

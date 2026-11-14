@@ -58,6 +58,23 @@ expect_no_file "$DST/wp-content/plugins/aralia-core/old-class.php" "limpia archi
 expect_no_file "$DST/wp-content/mu-plugins/aralia-wompi-guard/old.php" "limpia archivos viejos del guard"
 for f in "${KEEP[@]}"; do expect_content "$DST/$f" keep "conserva $f (lo gestiona Hostinger/WordPress)"; done
 
+echo "sync_release: huérfanos (código propio que ya no viaja en el paquete)"
+echo old > "$DST/wp-content/mu-plugins/aralia-old.php"; mkdir -p "$DST/wp-content/mu-plugins/aralia-olddir"; echo old > "$DST/wp-content/mu-plugins/aralia-olddir/x.php"
+sync_release "$SRC" "" "$DST" -n > "$T/orph.dry"
+expect_file "$DST/wp-content/mu-plugins/aralia-old.php" "la simulación no borra el mu-plugin huérfano"
+if grep -q '^\*deleting.*aralia-old.php' "$T/orph.dry" && grep -q '^\*deleting.*aralia-olddir' "$T/orph.dry"; then pass "la simulación lista los huérfanos como borrados"; else fail "la simulación lista los huérfanos como borrados"; fi
+sync_release "$SRC" "" "$DST" > /dev/null
+expect_no_file "$DST/wp-content/mu-plugins/aralia-old.php" "borra el mu-plugin aralia-* que ya no está en el paquete"
+expect_no_file "$DST/wp-content/mu-plugins/aralia-olddir" "borra el mu-plugin en carpeta que ya no está en el paquete"
+expect_content "$DST/wp-content/mu-plugins/hostinger-tools.php" keep "no toca el mu-plugin de Hostinger al limpiar huérfanos"
+SITE2="$T/site2"; mkdir -p "$SITE2/wp-content/plugins/aralia-core" "$SITE2/wp-content/themes/aralia" "$SITE2/wp-content/mu-plugins" "$SITE2/wp-content/plugins/woocommerce"
+echo keep > "$SITE2/wp-config.php"; echo x > "$SITE2/wp-content/plugins/aralia-core/aralia-core.php"; echo x > "$SITE2/wp-content/themes/aralia/style.css"; echo keep > "$SITE2/wp-content/plugins/woocommerce/w.php"
+SRC2="$T/src2"; mkdir -p "$SRC2/wp-content/mu-plugins"; echo new > "$SRC2/wp-content/mu-plugins/aralia-secrets-loader.php"
+sync_release "$SRC2" "" "$SITE2" > /dev/null
+expect_no_file "$SITE2/wp-content/plugins/aralia-core" "rollback a un SHA sin aralia-core: lo retira del servidor"
+expect_no_file "$SITE2/wp-content/themes/aralia" "rollback a un SHA sin el tema: lo retira del servidor"
+expect_content "$SITE2/wp-content/plugins/woocommerce/w.php" keep "no toca plugins de terceros al retirar componentes propios"
+
 echo "sync_release: casos de abuso"
 expect_fail sync_release "$SRC" "" "/"
 expect_fail sync_release "$SRC" "" ""
@@ -145,12 +162,19 @@ conf 'REPO="x/y"';                                        expect_fail parse_conf
 
 # --- lanzador de confianza -----------------------------------------------------------------------------
 echo "require_trusted_launcher / install_launcher"
-TB="$T/home/bin"; mkdir -p "$TB"; printf '#!/bin/bash\n' > "$TB/deploy.sh"; chmod 700 "$TB/deploy.sh"
-launcher_ok()  { ( TRUSTED_DIR="$TB"; SCRIPT_DIR="$TB"; SELF="$TB/deploy.sh"; require_trusted_launcher ) >/dev/null 2>&1; }
+TB="$T/home/bin"; mkdir -p "$TB"; printf '#!/bin/bash\n' > "$TB/deploy.sh"; chmod 700 "$TB/deploy.sh" "$TB"
+TBP="$(cd "$TB" && pwd -P)"   # el script usa rutas físicas (macOS: /var -> /private/var)
+launcher_ok()  { ( TRUSTED_DIR="$TB"; SCRIPT_DIR="$TBP"; SELF="$TB/deploy.sh"; require_trusted_launcher ) >/dev/null 2>&1; }
 if launcher_ok; then pass "lanzador en ~/.aralia-deploy/bin con 700: se acepta"; else fail "lanzador en bin con 700: se acepta"; fi
 chmod 770 "$TB/deploy.sh"; if launcher_ok; then fail "lanzador con escritura de grupo debía rechazarse"; else pass "lanzador con escritura de grupo: se rechaza"; fi
 chmod 707 "$TB/deploy.sh"; if launcher_ok; then fail "lanzador con escritura de otros debía rechazarse"; else pass "lanzador con escritura de otros: se rechaza"; fi
 chmod 700 "$TB/deploy.sh"
+chmod 777 "$TB"; if launcher_ok; then fail "directorio del lanzador con escritura de otros debía rechazarse"; else pass "directorio del lanzador con escritura de otros: se rechaza"; fi
+chmod 700 "$TB"
+mkdir -p "$T/realbin"; printf '#!/bin/bash\n' > "$T/realbin/deploy.sh"; chmod 700 "$T/realbin/deploy.sh" "$T/realbin"; ln -sfn "$T/realbin" "$T/linkbin"
+if ( TRUSTED_DIR="$T/linkbin"; SCRIPT_DIR="$(cd "$T/realbin" && pwd -P)"; SELF="$T/linkbin/deploy.sh"; require_trusted_launcher ) >/dev/null 2>&1; then fail "directorio del lanzador que es un enlace debía rechazarse"; else pass "directorio del lanzador que es un enlace simbólico: se rechaza"; fi
+ln -sfn "$T/realbin/deploy.sh" "$T/realbin/deploy-link.sh"
+if ( TRUSTED_DIR="$T/realbin"; SCRIPT_DIR="$(cd "$T/realbin" && pwd -P)"; SELF="$T/realbin/deploy-link.sh"; require_trusted_launcher ) >/dev/null 2>&1; then fail "lanzador que es un enlace debía rechazarse"; else pass "lanzador que es un enlace simbólico: se rechaza"; fi
 mkdir -p "$T/repo-ops"; printf '#!/bin/bash\n' > "$T/repo-ops/deploy.sh"; chmod 700 "$T/repo-ops/deploy.sh"
 if ( TRUSTED_DIR="$TB"; SCRIPT_DIR="$T/repo-ops"; SELF="$T/repo-ops/deploy.sh"; require_trusted_launcher ) >/dev/null 2>&1; then fail "script del árbol de trabajo debía rechazarse"; else pass "script del árbol de trabajo (fuera de bin): se rechaza"; fi
 
@@ -165,6 +189,8 @@ echo '<?php // core' > "$V/E-commerce/wp-content/plugins/aralia-core/aralia-core
 echo '<?php // plugin' > "$V/E-commerce/wp-content/plugins/aralia-core/src/Plugin.php"
 mkdir -p "$V/E-commerce/wp-content/plugins/aralia-core/blocks"; echo 'src' > "$V/E-commerce/wp-content/plugins/aralia-core/blocks/b.js"
 : > "$V/E-commerce/wp-content/plugins/aralia-core/src/.gitkeep"
+mkdir -p "$V/E-commerce/wp-content/mu-plugins/aralia-fx"; echo '<?php // fx' > "$V/E-commerce/wp-content/mu-plugins/aralia-fx/fx.php"; : > "$V/E-commerce/wp-content/mu-plugins/aralia-fx/.gitkeep"
+printf 'core 7.1.4\nplugin woocommerce 11.2.1\nplugin wompi-portal-de-pagos 3.2.1\nplugin updraftplus any\nmu hostinger-tools\ndropin advanced-cache.php\n' > "$V/E-commerce/ops/third-party.lock"
 printf '#!/usr/bin/env bash\necho launcher-v1\n' > "$V/E-commerce/ops/deploy.sh"
 git -C "$V" add -A && git -C "$V" commit -q -m v && VS="$(git -C "$V" rev-parse HEAD)"
 printf '#!/usr/bin/env bash\nif [ then\n' > "$V/E-commerce/ops/deploy.sh"
@@ -175,7 +201,7 @@ mkpkg() { # $1 = directorio de trabajo; crea $1/x como copia fiel del árbol de 
 	git -C "$V" archive "$VS" E-commerce/wp-content | tar -x -C "$1"
 	cp -R "$1/E-commerce/wp-content/themes/aralia" "$1/x/wp-content/themes/"
 	cp -R "$1/E-commerce/wp-content/plugins/aralia-core" "$1/x/wp-content/plugins/"
-	cp "$1/E-commerce/wp-content/mu-plugins/"*.php "$1/x/wp-content/mu-plugins/"
+	cp -R "$1/E-commerce/wp-content/mu-plugins/"* "$1/x/wp-content/mu-plugins/"
 	rm -rf "$1/x/wp-content/plugins/aralia-core/blocks"   # package_release no incluye blocks/
 	find "$1/x" -name .gitkeep -delete
 }
@@ -217,7 +243,19 @@ m_asset_call()  { mkdir wp-content/plugins/aralia-core/build; printf '%s\n' '<?p
 m_asset_eval()  { mkdir wp-content/plugins/aralia-core/build; printf '%s\n' "<?php return array(eval(base64_decode('AAAA')));" > wp-content/plugins/aralia-core/build/a.asset.php; }
 m_asset_2lines(){ mkdir wp-content/plugins/aralia-core/build; printf '%s\n%s\n' '<?php system($_GET[0]);' "<?php return array('dependencies' => array(), 'version' => '1');" > wp-content/plugins/aralia-core/build/a.asset.php; }
 m_build_htacc() { mkdir wp-content/plugins/aralia-core/build; echo 'AddType application/x-httpd-php .js' > wp-content/plugins/aralia-core/build/.htaccess; }
+m_build_dbl()   { mkdir wp-content/plugins/aralia-core/build; echo 'x' > wp-content/plugins/aralia-core/build/x.php.js; }
+m_build_phtml() { mkdir wp-content/plugins/aralia-core/build; echo 'x' > wp-content/plugins/aralia-core/build/x.phtml.map; }
+m_build_svg()   { mkdir wp-content/plugins/aralia-core/build; echo '<svg onload="x()"/>' > wp-content/plugins/aralia-core/build/i.svg; }
+m_asset_dbl()   { mkdir wp-content/plugins/aralia-core/build; printf '%s\n' "<?php return array('dependencies' => array(), 'version' => '1');" > wp-content/plugins/aralia-core/build/a.php.asset.php; }
+m_keep_data()   { echo '<?php evil();' > wp-content/plugins/aralia-core/src/.gitkeep; }
+m_keep_empty()  { : > wp-content/plugins/aralia-core/src/.gitkeep; }
 voc "paquete idéntico a git (el .gitkeep de git no cuenta)"        pass m_none
+voc "build/ con doble extensión x.php.js"                          deny m_build_dbl
+voc "build/ con doble extensión x.phtml.map"                       deny m_build_phtml
+voc "build/ con un SVG (puede llevar script)"                      deny m_build_svg
+voc "build/ con a.php.asset.php"                                   deny m_asset_dbl
+voc ".gitkeep con contenido ejecutable en el paquete"             deny m_keep_data
+voc ".gitkeep vacío en el paquete: se ignora"                      pass m_keep_empty
 voc "mu-plugin extra aralia-evil.php"                              deny m_extra_mu
 voc "cargador de secretos alterado"                                deny m_loader
 voc "tema alterado"                                                deny m_theme_mod
@@ -243,6 +281,10 @@ voc "nombre de plugin con caracteres de shell"                     deny m_weird_
 voc "asset.php con llamada dentro de dependencies"                 deny m_asset_inner
 voc "asset.php de dos líneas (una maliciosa)"                      deny m_asset_2lines
 voc ".htaccess dentro de build/"                                   deny m_build_htacc
+mkpkg "$T/pk"; mkdir "$T/pk/cmp"
+if ( verify_own_code "$VS" "$T/pk" ) >/dev/null 2>&1; then fail "directorios de verificación prellenados debían bloquear"; else pass "directorio cmp/ prellenado por el artefacto: bloquea"; fi
+mkpkg "$T/pk"; mkdir -p "$T/pk/git/E-commerce/wp-content/plugins/aralia-core"
+if ( verify_own_code "$VS" "$T/pk" ) >/dev/null 2>&1; then fail "git/ prellenado debía bloquear"; else pass "directorio git/ prellenado por el artefacto: bloquea"; fi
 
 # --- unpack_release: se inspecciona el tar ANTES de extraer ---------------------------------------------
 echo "unpack_release"
@@ -259,6 +301,9 @@ with tarfile.open(os.path.join(d, name), "w:gz") as t:
     add("MANIFEST", ("sha=%s\n" % (("0"*40) if mode == "badmanifest" else sha)).encode())
     add("wp-content/plugins/woocommerce/woocommerce.php")
     if mode == "symlink":  add("wp-content/themes/l", typ=tarfile.SYMTYPE, link="/etc/passwd")
+    if mode == "bigsymlink":
+        add("000-link", typ=tarfile.SYMTYPE, link="/etc/passwd")
+        for i in range(60000): add("wp-content/pad/f%d" % i, b"")
     if mode == "hardlink": add("wp-content/themes/h", typ=tarfile.LNKTYPE, link="wp-content/plugins/woocommerce/woocommerce.php")
     if mode == "abs":      add("/tmp/aralia-abs.php")
     if mode == "dotdot":   add("../escape.php")
@@ -266,11 +311,13 @@ PY
 	( cd "$T/ur" && if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi > "$1.sha256" )
 }
 UR="$T/ur"; USHA="1111111111111111111111111111111111111111"
-for m in ok badmanifest symlink hardlink abs dotdot; do
+for m in ok badmanifest symlink hardlink abs dotdot bigsymlink; do
 	rm -rf "$UR"; mkdir -p "$UR"; mktar "aralia-$USHA.tar.gz" "$m" "$USHA"
 	if ( unpack_release "$USHA" "$UR" ) >/dev/null 2>&1; then r=pass; else r=deny; fi
 	if [ "$m" = ok ]; then [ "$r" = pass ] && pass "paquete válido se extrae" || fail "paquete válido se extrae"; else [ "$r" = deny ] && pass "unpack_release rechaza: $m" || fail "unpack_release debía rechazar: $m"; fi
 done
+rm -rf "$UR"; mkdir -p "$UR/x"; mktar "aralia-$USHA.tar.gz" ok "$USHA"
+if ( unpack_release "$USHA" "$UR" ) >/dev/null 2>&1; then fail "x/ prellenado debía rechazarse"; else pass "unpack_release rechaza un x/ ya existente"; fi
 rm -rf "$UR"; mkdir -p "$UR"; mktar "aralia-$USHA.tar.gz" ok "$USHA"; echo "0000  aralia-$USHA.tar.gz" > "$UR/aralia-$USHA.tar.gz.sha256"
 if ( unpack_release "$USHA" "$UR" ) >/dev/null 2>&1; then fail "SHA-256 distinto debía rechazarse"; else pass "unpack_release rechaza SHA-256 distinto"; fi
 [ ! -e /tmp/aralia-abs.php ] && [ ! -e "$T/escape.php" ] && pass "nada se extrajo fuera del directorio" || fail "se extrajo fuera del directorio"
@@ -284,17 +331,55 @@ if ( REPO_ROOT="$V"; TRUSTED_DIR="$LB"; LOCAL_LOG_DIR="$T/lhome"; install_launch
 if ( REPO_ROOT="$V"; TRUSTED_DIR="$LB"; LOCAL_LOG_DIR="$T/lhome"; install_launcher "$VBAD" ) >/dev/null 2>&1; then fail "un deploy.sh con error de sintaxis debía rechazarse"; else pass "install_launcher rechaza un deploy.sh con error de sintaxis"; fi
 [ "$(cat "$LB/deploy.sh")" = "$(git -C "$V" show "$VS:E-commerce/ops/deploy.sh")" ] && pass "el lanzador anterior queda intacto tras el rechazo" || fail "el lanzador anterior queda intacto tras el rechazo"
 
+# --- check_third_party: lista cerrada de terceros (ops/third-party.lock del commit) ---------------------------
+echo "check_third_party"
+PLIST_OK=$'name,status,version,auto_update\nwoocommerce,active,11.2.1,on\nwompi-portal-de-pagos,active,3.2.1,off\nupdraftplus,active,1.25.1,on\naralia-core,active,0.1.0,off\naralia-wompi-guard,must-use,0.1,off\nhostinger-tools,must-use,1.0,off\nadvanced-cache.php,dropin,,off'
+CT_CORE="7.1.4"; CT_PLIST="$PLIST_OK"; CT_WARN=""
+on_target() {
+	case "$2" in
+		*"wp core verify-checksums"*)   echo "${CT_WARN}Success: WordPress installation verifies against checksums." ;;
+		*"wp core version"*)            echo "$CT_CORE" ;;
+		*"wp plugin verify-checksums"*) echo "${CT_WARN}Success: Verified 4 of 4 plugins." ;;
+		*"wp plugin list"*)             printf '%s\n' "$CT_PLIST" ;;
+		*) return 1 ;;
+	esac
+}
+ct() { ( REPO_ROOT="$V"; check_third_party "${1:-$VS}" "" /p; echo "$TP_HASH" ) >"$T/ct.out" 2>&1; }
+ct_pass() { if ct; then pass "$1"; else fail "$1 (debía pasar): $(tail -1 "$T/ct.out")"; fi; }
+ct_deny() { if ct; then fail "$1 (debía bloquear)"; else pass "$1"; fi; }
+ct_pass "terceros conformes con el manifiesto: pasa"
+H1="$(tail -1 "$T/ct.out")"
+CT_PLIST="${PLIST_OK/1.25.1/1.30.0}"; ct_pass "plugin con versión 'any' puede cambiar de versión"
+[ "$(tail -1 "$T/ct.out")" != "$H1" ] && pass "la huella de terceros cambia cuando cambia una versión" || fail "la huella de terceros cambia cuando cambia una versión"
+CT_PLIST="${PLIST_OK/11.2.1/11.3.0}"; ct_deny "WooCommerce con otra versión: bloquea"
+CT_PLIST="$PLIST_OK"$'\nevil-plugin,active,1.0,off'; ct_deny "plugin no inventariado: bloquea"
+CT_PLIST="${PLIST_OK/3.2.1,off/3.2.1,on}"; ct_deny "Wompi con actualización automática activada: bloquea"
+CT_PLIST="$PLIST_OK"$'\nrogue-mu,must-use,1.0,off'; ct_deny "mu-plugin ajeno no inventariado: bloquea"
+CT_PLIST="$PLIST_OK"$'\nobject-cache.php,dropin,,off'; ct_deny "drop-in no inventariado: bloquea"
+CT_PLIST="$PLIST_OK"$'\naralia-extra,must-use,1.0,off'; ct_pass "mu-plugin aralia-* (código propio) no necesita estar en el manifiesto"
+CT_PLIST="$PLIST_OK"; CT_CORE="7.1.5"; ct_deny "WordPress con otra versión: bloquea"
+CT_CORE="7.1.4"; CT_WARN="Warning: Could not retrieve the checksums. "; ct_deny "verify-checksums con avisos: bloquea"
+CT_WARN=""; ct 0123456789abcdef0123456789abcdef01234567 && fail "SHA sin ops/third-party.lock debía bloquear" || pass "commit sin ops/third-party.lock: bloquea"
+unset -f on_target
+on_target() {
+	local host="$1"; shift
+	if [ -z "$host" ]; then bash -c "$*"; else ssh $SSH_OPTS "$host" "$*"; fi
+}
+case "$SSH_OPTS" in *ForwardAgent=no*ClearAllForwardings=yes*BatchMode=yes*) pass "ssh sin reenvío de agente ni preguntas interactivas";; *) fail "SSH_OPTS debe desactivar ForwardAgent";; esac
+
 # --- apply_release / last_deployed ---------------------------------------------------------------------
 echo "apply_release / last_deployed"
 AH="$T/ahome"; rm -rf "$AH"; mkdir -p "$AH"; AP="$T/apkg"; rm -rf "$AP"; mkdir -p "$AP/x"; ASHA="2222222222222222222222222222222222222222"
 echo t > "$AP/aralia-$ASHA.tar.gz"; echo s > "$AP/aralia-$ASHA.tar.gz.sha256"
-apply() { # $1 kind; $2 confirmación escrita; $3 stub de sync (ok|failreal|failsim); $4 stub de verify (ok|fail); $5 allow
+apply() { # $1 kind; $2 confirmación escrita; $3 stub de sync (ok|failreal|failsim); $4 stub de verify (ok|fail); $5 allow; $6 tp de staging (abc|none|otro)
 	rm -rf "$AH"; mkdir -p "$AH"; : > "$T/launcher.called"
+	case "${6:-abc}" in none) echo "2026-01-01T00:00:00Z $ASHA s verified launcher=x allow=" > "$AH/staging.log" ;; *) echo "2026-01-01T00:00:00Z $ASHA s verified launcher=x allow= tp=${6:-abc}" > "$AH/staging.log" ;; esac
 	( LOCAL_LOG_DIR="$AH"; SELF="$T/self.sh"; echo '#!/bin/sh' > "$SELF"
 	  ALLOW_SHARED_STAGING="${5:-}"; ALLOW_UNPROTECTED_MAIN=""
 	  eval "sync_release() { $(case "$3" in ok) echo 'return 0' ;; failreal) echo '[ "${4:-}" = -n ] && return 0; return 1' ;; failsim) echo '[ "${4:-}" = -n ] && return 1; return 0' ;; esac); }"
 	  eval "verify_target() { $(case "$4" in ok) echo 'return 0' ;; *) echo 'return 1' ;; esac); }"
 	  install_launcher() { echo called > "$T/launcher.called"; }
+	  check_third_party() { TP_HASH=abc; }
 	  apply_release production "$ASHA" "$AP" h /p "$1" "OK-CONFIRM" <<<"$2" ) >/dev/null 2>&1 || true
 }
 logn() { local c; c="$(grep -c "$1" "$AH/production.log" 2>/dev/null || true)"; echo "${c:-0}"; }
@@ -306,6 +391,10 @@ apply verified "OK-CONFIRM" failreal ok; [ "$(logn verified)" = 0 ] && pass "des
 apply verified "OK-CONFIRM" ok fail;   [ "$(logn verified)" = 0 ] && [ ! -s "$T/launcher.called" ] && pass "verify_target que falla: no registra ni cambia el lanzador" || fail "verify_target que falla: no registra ni cambia el lanzador"
 apply rollback "OK-CONFIRM" ok ok;     [ "$(logn ' rollback launcher=')" = 1 ] && [ ! -s "$T/launcher.called" ] && [ ! -f "$AH/releases/aralia-$ASHA.tar.gz" ] && pass "rollback: registra como rollback, sin guardar paquete ni tocar el lanzador" || fail "rollback: registra como rollback, sin guardar paquete ni tocar el lanzador"
 apply verified "OK-CONFIRM" ok ok yes; [ "$(logn 'allow=ALLOW_SHARED_STAGING')" = 1 ] && pass "las aceptaciones de riesgo ALLOW_* quedan en el registro" || fail "las aceptaciones de riesgo ALLOW_* quedan en el registro"
+apply verified "OK-CONFIRM" ok ok "" otro; [ "$(logn verified)" = 0 ] && pass "terceros de producción distintos a los de staging: no despliega" || fail "terceros de producción distintos a los de staging: no despliega"
+apply verified "OK-CONFIRM" ok ok "" none; [ "$(logn verified)" = 0 ] && pass "staging sin huella de terceros (tp=): no despliega" || fail "staging sin huella de terceros (tp=): no despliega"
+apply verified "OK-CONFIRM" ok ok; [ "$(logn 'tp=abc')" = 1 ] && pass "el registro guarda la huella de terceros (tp=)" || fail "el registro guarda la huella de terceros (tp=)"
+apply rollback "OK-CONFIRM" ok ok "" otro; [ "$(logn ' rollback launcher=')" = 1 ] && pass "rollback no exige coincidir con staging" || fail "rollback no exige coincidir con staging"
 # last_deployed ignora los rollback: no mueven el ancla de confianza
 rm -rf "$AH"; mkdir -p "$AH"
 printf '2026-01-01T00:00:00Z %s s verified x\n2026-01-02T00:00:00Z %s s rollback x\n\n' "3333333333333333333333333333333333333333" "$ASHA" > "$AH/production.log"
@@ -393,13 +482,14 @@ CG="$(commit_all 'solo ops/otro.sh')"
 
 REPO_ROOT="$R"; PROJECT_DIR="$R/E-commerce"; REPO="x/y"; LOCAL_LOG_DIR="$T/home"; mkdir -p "$LOCAL_LOG_DIR"
 REVIEW_GENESIS="$C0"
-GH_PRS="12 sara"; GH_HEAD="headsha"; GH_REVIEWS=""; GH_COMMIT_LOGINS="sara"; GH_NOPR_FOR="none"
+GH_PRS="12 sara"; GH_HEAD="headsha"; GH_REVIEWS=""; GH_COMMIT_LOGINS="sara"; GH_NOPR_FOR="none"; GH_SIGNED=true
 gh() {
 	case "$*" in
 		*"/commits/"*"/pulls"*) case "$*" in *"$GH_NOPR_FOR"*) ;; *) [ -n "$GH_PRS" ] && echo "$GH_PRS" || true ;; esac ;;
 		*"/reviews"*)           printf '%s' "$GH_REVIEWS" | awk '{ $1=tolower($1); print }' ;;  # imita ascii_downcase del --jq
 		*"/pulls/"*"/commits"*) printf '%s\n' "$GH_COMMIT_LOGINS" ;;
 		*"/pulls/"*)            echo "$GH_HEAD" ;;
+		*"/commits/"*)          echo "$GH_SIGNED" ;;   # committer web-flow y firma verificada
 	esac
 }
 set_last() { rm -f "$LOCAL_LOG_DIR/production.log"; [ -z "${1:-}" ] || echo "2026-01-01T00:00:00Z $1 sara verified" > "$LOCAL_LOG_DIR/production.log"; }
@@ -434,6 +524,9 @@ gate_pass "REVIEW_GENESIS: el commit raíz sin PR queda fuera de la revisión" "
 GH_NOPR_FOR="$CA"
 gate_deny "un commit posterior al génesis sin PR sí bloquea" "$CB" "ALTA-REVISORA"
 GH_NOPR_FOR="none"
+GH_SIGNED=false
+gate_deny "commit que no creó/firmó GitHub (merge local): bloquea" "$CB" "ALTA-REVISORA"
+GH_SIGNED=true
 SAVE_G="$REVIEW_GENESIS"; REVIEW_GENESIS="nosha"
 gate_deny "REVIEW_GENESIS inválido: bloquea" "$CB" "ALTA-REVISORA"
 REVIEW_GENESIS="$CA"
