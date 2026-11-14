@@ -1,0 +1,27 @@
+# Avisos de actualización (research R-15, SLA de parcheo). Dependabot solo propone PRs: nada se despliega sin CI
+# y sin un PR aprobado por la revisora (lo hace cumplir ops/deploy.sh; CODEOWNERS no bloquea con el plan Free). El plugin de Wompi NO se actualiza sin pasar la prueba de contrato (D-01).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly }
+    labels: [dependencias, ci]
+
+  - package-ecosystem: composer
+    directory: "/E-commerce"
+    schedule: { interval: weekly }
+    labels: [dependencias]
+    ignore:
+      # Fijado a 3.2.1: cualquier cambio pasa por el contrato del guard y la revisora humana (D-01, R-15).
+      - dependency-name: "wpackagist-plugin/wompi-portal-de-pagos"
+      # Las versiones de WooCommerce/Wordfence/LiteSpeed/WordPress las fija ops/third-party.lock tras probarlas en staging (T168):
+      # un PR de Dependabot en composer.lock desalinearía lo probado en CI de lo instalado en Hostinger.
+      - dependency-name: "wpackagist-plugin/woocommerce"
+      - dependency-name: "wpackagist-plugin/wordfence"
+      - dependency-name: "roots/wordpress-no-content"
+
+  - package-ecosystem: npm
+    directory: "/E-commerce"
+    schedule: { interval: weekly }
+    labels: [dependencias]
+    open-pull-requests-limit: 5

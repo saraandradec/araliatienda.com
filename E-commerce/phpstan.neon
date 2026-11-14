@@ -1,0 +1,15 @@
+includes:
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+    level: 6
+    paths:
+        - wp-content/plugins/aralia-core
+        - wp-content/mu-plugins
+    excludePaths:
+        - wp-content/plugins/aralia-core/build/*
+    bootstrapFiles:
+        - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+    scanDirectories:
+        - wp-content/plugins/wompi-portal-de-pagos
+    treatPhpDocTypesAsCertain: false

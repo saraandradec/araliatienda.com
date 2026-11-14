@@ -1,0 +1,25 @@
+{
+  "name": "aralia-ecommerce",
+  "private": true,
+  "description": "Aralía Beauty Store — herramientas de frontend, entorno y pruebas",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "env:start": "wp-env start",
+    "env:stop": "wp-env stop",
+    "env:cli": "wp-env run cli",
+    "build": "wp-scripts build --webpack-src-dir=wp-content/plugins/aralia-core/blocks --output-path=wp-content/plugins/aralia-core/build",
+    "start": "wp-scripts start --webpack-src-dir=wp-content/plugins/aralia-core/blocks --output-path=wp-content/plugins/aralia-core/build",
+    "lint:js": "wp-scripts lint-js wp-content/plugins/aralia-core wp-content/themes/aralia tests/e2e",
+    "test:e2e": "playwright test",
+    "test:lighthouse": "lhci autorun"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@lhci/cli": "0.16.1",
+    "@playwright/test": "1.65.0",
+    "@wordpress/env": "12.1.0",
+    "@wordpress/scripts": "37.1.0"
+  }
+}

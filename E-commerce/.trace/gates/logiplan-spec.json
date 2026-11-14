@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-11-03T23:59:00-05:00",
+  "tier": "T0",
+  "feature": "specs/001-aralia-store-p0",
+  "stage": "logiplan:spec",
+  "gates": {
+    "trace-classify": "T0",
+    "logicraft-trace:compliance-mapper": "mapped (19 huecos; incorporados al spec, threat-model v1.2 y plan)",
+    "user-approval": "pass"
+  },
+  "iterations": 1,
+  "signed_off_by": "Sara Andrade (aprobación del documento base)",
+  "notes": "spec.md + anexos T0 (threat-model.md, data-classification.md, compliance-mapping.md). El arquitecto revisó el spec dentro de los checkpoints de plan y congruencia (logiplan no define un checkpoint de arquitecto exclusivo para el spec)."
+}

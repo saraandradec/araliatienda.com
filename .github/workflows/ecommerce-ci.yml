@@ -1,0 +1,197 @@
+name: E-commerce CI
+
+# Acciones fijadas por SHA (TM T-9); Dependabot las mantiene (.github/dependabot.yml).
+# Los pasos de cada fase se activan cuando existe su código: así el CI está en verde desde la fase 1
+# sin dejar pasar en vacío lo que sí debe existir (ver "Puertas de existencia").
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: E-commerce
+
+concurrency:
+  group: ecommerce-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+
+jobs:
+  secrets:
+    name: Secretos (gitleaks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults: { run: { working-directory: . } }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0, persist-credentials: false }
+      - name: gitleaks (binario verificado por SHA-256)
+        run: |
+          curl -sSfL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks git . --config E-commerce/.gitleaks.toml --redact --exit-code 1
+
+  php:
+    name: PHP (validate, audit, PHPCS, PHPStan, unit)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with: { php-version: "8.3", tools: "composer:v2", coverage: none }
+      - name: composer.json y composer.lock sincronizados
+        run: composer validate --no-check-all --strict
+      - run: composer install --no-interaction --prefer-dist
+      - name: Avisos de seguridad (Composer)
+        run: composer audit --locked
+      - run: composer lint
+      - run: composer stan
+      - run: composer test
+
+  node:
+    name: Node (audit y lint)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: "20", cache: npm, cache-dependency-path: E-commerce/package-lock.json }
+      - run: npm ci --ignore-scripts
+      # Bloquea solo lo que se publica en la tienda; los avisos de herramientas de desarrollo se revisan en ops/inventory.md.
+      - name: Avisos de seguridad (dependencias de producción)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Pruebas del despliegue (ops/deploy.sh)
+        run: bash tests/ops/deploy_test.sh
+
+  wp:
+    name: WordPress (integración, contrato, E2E + axe, Lighthouse)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    needs: [php, node]
+    # Los PR de forks y Dependabot no reciben secretos: el job se omite de forma declarada (no por accidente).
+    if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+
+      - name: Puertas de existencia
+        id: has
+        run: |
+          has() { if compgen -G "$1" > /dev/null; then echo "$2=true" >> "$GITHUB_OUTPUT"; else echo "$2=false" >> "$GITHUB_OUTPUT"; fi; }
+          has "wp-content/plugins/aralia-core/aralia-core.php" core
+          has "wp-content/mu-plugins/aralia-wompi-guard*" guard
+          has "tests/php/integration/*Test.php" integration
+          has "tests/php/contract/*Test.php" contract
+          shopt -s globstar; has "tests/e2e/**/*.spec.ts" e2e
+          has "lighthouserc.json" lhci
+          # Pruebas obligatorias: ninguna puede omitirse en silencio y dejar el CI en verde (principio X).
+          # El guard puede ser carpeta (aralia-wompi-guard/) o archivo único (aralia-wompi-guard.php).
+          if compgen -G "wp-content/mu-plugins/aralia-wompi-guard*" > /dev/null && ! compgen -G "tests/php/contract/*Test.php" > /dev/null; then
+            echo "::error::Existe aralia-wompi-guard pero no hay pruebas en tests/php/contract/ (D-01)"; exit 1
+          fi
+          if [ -f wp-content/plugins/aralia-core/aralia-core.php ] && ! compgen -G "tests/php/integration/*Test.php" > /dev/null; then
+            echo "::error::Existe aralia-core pero no hay pruebas de integración en tests/php/integration/"; exit 1
+          fi
+          # Con E2E presentes, Lighthouse es obligatorio desde la puerta de la fase 1 (T073).
+          shopt -s globstar
+          if compgen -G "tests/e2e/**/*.spec.ts" > /dev/null && [ ! -f lighthouserc.json ]; then
+            echo "::error::Hay E2E pero falta lighthouserc.json (T098)"; exit 1
+          fi
+
+      - if: steps.has.outputs.core == 'true' || steps.has.outputs.integration == 'true' || steps.has.outputs.contract == 'true' || steps.has.outputs.e2e == 'true'
+        id: run
+        run: echo "wp=true" >> "$GITHUB_OUTPUT"
+
+      - if: steps.run.outputs.wp == 'true'
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with: { php-version: "8.3", tools: "composer:v2", coverage: none }
+      - if: steps.run.outputs.wp == 'true'
+        run: composer install --no-interaction --prefer-dist
+      - if: steps.run.outputs.wp == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: "20", cache: npm, cache-dependency-path: E-commerce/package-lock.json }
+      - if: steps.run.outputs.wp == 'true'
+        run: npm ci
+
+      - name: Secretos de Sandbox (solo llaves de prueba; se borran al final)
+        if: steps.run.outputs.wp == 'true'
+        env:
+          ARALIA_CI_SECRETS: ${{ secrets.ARALIA_CI_SECRETS_SANDBOX }}
+        run: |
+          umask 077
+          # Un secreto vacío (p. ej. PR desde un fork) no puede dejar pasar el job con el guard sin llaves.
+          [ -n "$ARALIA_CI_SECRETS" ] || { echo "::error::ARALIA_CI_SECRETS_SANDBOX está vacío"; exit 1; }
+          mkdir -p .wp-env-private
+          printf '%s' "$ARALIA_CI_SECRETS" > .wp-env-private/aralia-secrets.php
+          if grep -Eq "(prv|pub)_prod_|prod_(events|integrity)_" .wp-env-private/aralia-secrets.php; then
+            echo "::error::El secreto de CI contiene llaves de producción"; exit 1
+          fi
+
+      - if: steps.run.outputs.wp == 'true'
+        run: npx wp-env start
+      - if: steps.has.outputs.core == 'true'
+        run: npx wp-env run cli wp aralia setup --sample-catalog
+
+      - name: PHPUnit de integración (WordPress real)
+        if: steps.has.outputs.integration == 'true'
+        run: npx wp-env run tests-cli --env-cwd=wp-content/aralia-repo vendor/bin/phpunit --testsuite integration
+      - name: Prueba de contrato del guard (D-01)
+        if: steps.has.outputs.contract == 'true'
+        run: npx wp-env run tests-cli --env-cwd=wp-content/aralia-repo vendor/bin/phpunit --testsuite contract
+
+      - if: steps.has.outputs.e2e == 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.has.outputs.e2e == 'true'
+        run: npm run test:e2e
+      - if: steps.has.outputs.lhci == 'true'
+        run: npm run test:lighthouse
+
+      - name: Borrar secretos de Sandbox
+        if: always()
+        run: rm -f .wp-env-private/aralia-secrets.php
+      - if: always() && steps.has.outputs.e2e == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: E-commerce/playwright-report
+          retention-days: 14
+
+  release:
+    # Paquete que despliega ops/deploy.sh (R-15). Sin secretos ni environment: la llave SSH nunca está en GitHub.
+    name: Paquete de release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: [secrets, php, node, wp]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      # Solo código propio: WordPress y los plugins de terceros los instala y actualiza Hostinger (no se empaquetan).
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: "20", cache: npm, cache-dependency-path: E-commerce/package-lock.json }
+      - name: Build de bloques (si existen)
+        run: |
+          if compgen -G "wp-content/plugins/aralia-core/blocks/*/block.json" > /dev/null; then npm ci --ignore-scripts && npm run build; fi
+      - name: Empaquetar
+        env:
+          SHA: ${{ github.sha }}
+        run: ops/deploy.sh package "$SHA"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ github.sha }}
+          path: |
+            E-commerce/release/aralia-${{ github.sha }}.tar.gz
+            E-commerce/release/aralia-${{ github.sha }}.tar.gz.sha256
+          retention-days: 90
+          if-no-files-found: error

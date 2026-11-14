@@ -1,0 +1,33 @@
+# Copiar como ~/.aralia-deploy/deploy.conf (FUERA del repositorio) y `chmod 600 ~/.aralia-deploy/deploy.conf`. No contiene
+# secretos: la llave SSH vive en ~/.ssh y ssh-agent. El script NO ejecuta este archivo: solo lee líneas CLAVE="valor"
+# (sin espacios finales) y valida cada valor.
+#
+# En ~/.ssh/config de Sara (Hostinger usa un puerto distinto de 22; confirmarlo en hPanel → SSH):
+#   Host aralia-prod
+#     HostName <ip o host de Hostinger>
+#     Port 65002
+#     User u123456789
+#     IdentityFile ~/.ssh/aralia_deploy_ed25519
+#     IdentitiesOnly yes
+#     StrictHostKeyChecking yes
+#   Host aralia-staging  → OTRA cuenta/usuario de Hostinger, con su propia llave (ver abajo).
+
+REPO="saraandradec/araliatienda.com"
+# Ruta absoluta de tu clon del repositorio (raíz, donde está .git). El lanzador de confianza vive fuera del clon y la toma de aquí.
+REPO_DIR="/Users/<tu-usuario>/Documents/Aralía-web"
+
+# IMPORTANTE: usa una cuenta/usuario de Hostinger DISTINTA para staging (con su propia llave). El código de staging
+# se despliega sin la revisión de producción; en la misma cuenta podría leer los secretos y la base de datos de producción.
+STAGING_SSH="aralia-staging"
+STAGING_PATH="/home/u987654321/domains/staging.araliatienda.com/public_html"
+
+PRODUCTION_SSH="aralia-prod"
+PRODUCTION_PATH="/home/u123456789/domains/araliatienda.com/public_html"
+
+# Interruptores de la PRIMERA SALIDA A PRODUCCIÓN (decisiones de Sara; sin ellos el script se niega a desplegar a producción).
+# Déjalos comentados. Descomentar uno es aceptar el riesgo por escrito: el script lo avisa en cada despliegue.
+#   ALLOW_SHARED_STAGING: staging comparte cuenta SSH con producción (el código de staging, sin revisión, podría leer
+#                         sus secretos y su base de datos).
+#   ALLOW_UNPROTECTED_MAIN: la rama main no tiene protección de GitHub (Pro/Team): cualquiera con Write puede empujar sin PR.
+# ALLOW_SHARED_STAGING="yes"
+# ALLOW_UNPROTECTED_MAIN="yes"
