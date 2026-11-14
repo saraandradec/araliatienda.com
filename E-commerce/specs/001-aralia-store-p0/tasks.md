@@ -4,7 +4,7 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
 
 # Tasks: Aralía Beauty Store — Tienda en línea (P0)
 
-**Input**: Documentos de `specs/001-aralia-store-p0/` (plan iteración 3 aprobado por `logicraft-trace:architect`)
+**Input**: Documentos de `specs/001-aralia-store-p0/` (plan iteración 3 aprobado por `logicraft-trace:architect`; la iteración 4 recoge la Fase 1 y la propuesta de constitución 1.2.0)
 **Prerequisites**: plan.md, spec.md, research.md (v3), data-model.md (v3), contracts/, quickstart.md, threat-model.md (v1.2), compliance-mapping.md
 **Tier TRACE**: T0 — cada fase pasa por los gates de `logidev` (arquitecto, code-reviewer, pruebas, security-reviewer, database-reviewer, verificación adversarial, sign-off humano).
 
@@ -38,7 +38,7 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
 
 - [x] T001 Ratificar la constitución del proyecto con `/speckit.constitution` (principios 1.2, reglas de marca 1.3 y reglas T0 de plan.md §Constitution Check) en `.specify/memory/constitution.md`
 - [x] T002 Crear la estructura de directorios del plan (`wp-content/{themes/aralia,plugins/aralia-core,mu-plugins}`, `tests/{php/{unit,integration,contract},e2e,load,fixtures}`, `tools/script-monitor`, `ops/{compliance,runbooks,templates}`) y `.gitignore` (secretos, `vendor/`, `node_modules/`, `.wp-env/`, `wp-content/uploads/`) en `.gitignore`
-- [x] T003 Declarar con versión fija WordPress 7.1.x (7.1.4 al 2026-11-03; 6.9 y 7.0 sin soporte de seguridad), WooCommerce 11.2.x, Wompi Portal de Pagos 3.2.1, Wordfence y LiteSpeed Cache (wpackagist) en `composer.json`; documentar la instalación manual de UpdraftPlus Premium en `ops/inventory.md`
+- [x] T003 Declarar para pruebas y wp-env (dependencias de desarrollo, **no se despliegan**) WordPress 7.1.x (7.1.4 al 2026-11-03; 6.9 y 7.0 sin soporte de seguridad), WooCommerce 11.2.x, Wompi Portal de Pagos 3.2.1 y Wordfence en `composer.json`; registrar en `ops/inventory.md` las versiones instaladas en Hostinger (incluidas LiteSpeed Cache y la instalación manual de UpdraftPlus Premium)
 - [x] T004 [P] Configurar `@wordpress/scripts`, `@wordpress/env`, Playwright, `@axe-core/playwright` y `@lhci/cli` en `package.json`
 - [x] T005 Configurar wp-env (PHP 8.3, plugins fijados, mapeo de `mu-plugins/`, inclusión de `aralia-secrets.php` de Sandbox) en `.wp-env.json`
 - [x] T006 [P] Configurar PHPCS (WordPress-Extra + reglas de seguridad) y PHPStan nivel 6 con stubs de WP/WC en `phpcs.xml.dist` y `phpstan.neon`
@@ -46,7 +46,7 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
 - [x] T008 Crear el pipeline de CI (PHPCS, PHPStan, PHPUnit, prueba de contrato, Playwright + axe, Lighthouse CI, gitleaks) en `.github/workflows/ecommerce-ci.yml` (en la raíz del repo; acciones con SHA fijado, pasos condicionados por existencia, job `release` que arma el paquete)
 - [x] T009 Crear el despliegue **local** `ops/deploy.sh` (package/staging/production; exige `main`, CI verde, checksum, staging previo y PR aprobado por `ops/payment-reviewers.txt`; `wp core verify-checksums` y `wp plugin verify-checksums` de la lista cerrada de plugins después de cada despliegue; el código propio se compara con `git archive`) con `ops/deploy.conf.sample` y `tests/ops/deploy_test.sh` (enmienda 1.1.0: el plan Free de GitHub no protege environments; `deploy.yml` eliminado). Incluye `rollback`, génesis de revisión, lista de revisoras del último despliegue con `ALTA-REVISORA` solo en el primer despliegue, y comparación del paquete con `git archive`
 - [x] T010 [P] Crear la plantilla de secretos con todas las constantes de research R-16 (Wompi ×8, Brevo, Turnstile, Meta CAPI, GA4 MP, cuenta de servicio GA4, `ARALIA_PII_KEY`, llave HMAC) en `ops/templates/aralia-secrets.sample.php`
-- [x] T011 Crear el repo privado en GitHub con 2FA obligatorio y revisión obligatoria de la revisora humana nombrada para `wp-content/mu-plugins/aralia-wompi-guard/`, `core/src/{Orders,Checkout,Cart,Rest}/` (R-15) en `.github/CODEOWNERS` y `ops/payment-reviewers.txt` (régimen transitorio: provisional en CODEOWNERS `@saraandradec`; `ops/payment-reviewers.txt` vacío a propósito; con plan Free lo hace cumplir `ops/deploy.sh`; el 2FA de colaboradoras se verifica en T014)
+- [x] T011 Crear el repo privado en GitHub con 2FA obligatorio y revisión humana obligatoria de TODO lo que llega a producción (R-15; con el plan Free la hace cumplir `ops/deploy.sh`) en `.github/CODEOWNERS` y `ops/payment-reviewers.txt` (régimen transitorio: provisional en CODEOWNERS `@saraandradec`; `ops/payment-reviewers.txt` vacío a propósito; con plan Free lo hace cumplir `ops/deploy.sh`; el 2FA de colaboradoras se verifica en T014)
 - [ ] T012 Contratar Hostinger Business/Cloud: PHP 8.3, SSH con llave, `DISABLE_WP_CRON` + cron real cada minuto, staging **limpio**, `aralia-secrets.php` fuera de `public_html` con permisos 600; documentarlo en `ops/baseline-config.md` (sección Hosting)
 - [x] T013 [P] Escribir el inventario de componentes (versión, justificación, criterios PO.1.3) en `ops/inventory.md`
 - [ ] T014 [P] Activar 2FA y contraseñas de 12 o más caracteres en Hostinger, registrador, correo, Wompi, Brevo, Meta Business, Google y GitHub; confirmar que no existe el usuario `admin`; checklist en `ops/compliance/accounts-2fa.md`
@@ -70,14 +70,15 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
 - [ ] T164 Implementar la bandera `--sample-catalog` de `wp aralia setup` (taxonomías, atributos y catálogo de ejemplo para local y CI) en `core/src/Cli/SetupCommand.php`
 - [ ] T165 Fijar la imagen base de Docker de wp-env en el CI (la `wordpress:php8.3` de Debian trixie falla en `apt install git` por falta del grupo `_ssh`; ver `ops/inventory.md`) antes de T020, en `.wp-env.json`/`.github/workflows/ecommerce-ci.yml`
 - [ ] T166 Condiciones de la primera salida a producción (decisiones de Sara): staging en una cuenta/usuario de Hostinger distinta de producción y GitHub Pro/Team con protección de `main`; `ops/deploy.sh` se niega a desplegar a producción sin ellas (salvo `ALLOW_SHARED_STAGING` / `ALLOW_UNPROTECTED_MAIN` en `deploy.conf`, aceptación escrita). Verificar antes de T160 en `ops/go-live-checklist.md` y `ops/compliance/accounts-2fa.md`
-- [ ] T167 Añadir al CI un paso de avisos de vulnerabilidades de WordPress para WooCommerce, Wompi, Wordfence y LiteSpeed (Wordfence Intelligence, Patchstack o WPScan): `composer audit` no cubre wpackagist; y verificar el SHA-256 de los zips de wpackagist antes de copiar en `.github/workflows/ecommerce-ci.yml` y `ops/inventory.md`
+- [ ] T167 Añadir al CI un paso de avisos de vulnerabilidades de WordPress para WooCommerce, Wompi, Wordfence y LiteSpeed (Wordfence Intelligence, Patchstack o WPScan), porque `composer audit` no cubre wpackagist, en `.github/workflows/ecommerce-ci.yml` y `ops/inventory.md`
+- [ ] T168 Política de actualizaciones de terceros en Hostinger: desactivar la actualización automática del plugin de Wompi (solo tras la prueba de contrato), copia previa con UpdraftPlus y prueba en staging antes de actualizar WooCommerce/Wordfence/LiteSpeed, y registro de la versión probada en `ops/inventory.md`; documentar en `ops/runbooks/patching.md` (junto con T149) y comprobarlo en `wp aralia baseline check`
 - [ ] T021 Crear las migraciones versionadas de las 6 tablas `aralia_*` con sus índices únicos (data-model §4) en `core/migrations/`
 - [ ] T022 [P] Escribir la prueba de migraciones e índices únicos en `tests/php/integration/MigrationsTest.php`
 - [ ] T023 Configurar WooCommerce con el comando `wp aralia setup`: COP, `woocommerce_price_num_decimals = 0`, stock gestionado, `woocommerce_hold_stock_minutes = 30`, HPOS con sincronización, checkout de bloques, compra como invitada, registro solo con rol cliente. En `core/src/Cli/SetupCommand.php`
 
 ### Seguridad base
 
-- [ ] T024 [P] Crear el mu-plugin de endurecimiento: `DISALLOW_FILE_EDIT`/`DISALLOW_FILE_MODS` en producción, sin XML-RPC, sin `/wp/v2/users` ni archivos de autor, depuración apagada y `uploads/` sin PHP. En `wp-content/mu-plugins/aralia-hardening.php`
+- [ ] T024 [P] Crear el mu-plugin de endurecimiento: `DISALLOW_FILE_EDIT` en producción (no `DISALLOW_FILE_MODS`: las actualizaciones se hacen desde wp-admin), sin XML-RPC, sin `/wp/v2/users` ni archivos de autor, depuración apagada y `uploads/` sin PHP. En `wp-content/mu-plugins/aralia-hardening.php`
 - [ ] T025 [P] Implementar las cabeceras de seguridad: HSTS, `nosniff`, `Referrer-Policy`, `Permissions-Policy` y `frame-ancestors 'self'`. En `core/src/Security/Headers.php`
 - [ ] T026 Implementar el limitador con incremento atómico (`INSERT … ON DUPLICATE KEY UPDATE`) en `core/src/Security/RateLimiter.php`, con su prueba en `tests/php/unit/RateLimiterTest.php`
 - [ ] T027 [P] Implementar el registro de actividad (inicios de sesión, fallos, roles, usuarios, plugins, ajustes, precios, estados, reembolsos, transiciones bloqueadas) en `core/src/Security/AuditLog.php`
@@ -371,7 +372,7 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
 - [ ] T150 Completar el inventario de scripts con la CSP en Report-Only durante 2 semanas, con cada medio en Sandbox **y en producción**, y pasar la CSP a modo aplicado, en `ops/script-inventory.md`
 - [ ] T151 Obtener y archivar el escaneo ASV aprobado del dominio en `ops/compliance/asv/`
 - [ ] T152 Ejecutar OWASP ZAP baseline contra staging (sin hallazgos altos), k6 a 10× (`tests/load/peak.js`), Lighthouse y axe finales; resultados en `ops/compliance/pre-launch-tests.md`
-- [ ] T153 Obtener la revisión humana independiente del camino de pago (guard, `Orders/`, `Checkout/`, `Cart/`, `Rest/`) con evidencia en el ledger TRACE
+- [ ] T153 Obtener la revisión humana independiente de todo el código que llega a producción, con foco en el camino de pago (guard, `Orders/`, `Checkout/`, `Cart/`, `Rest/`), con evidencia en el ledger TRACE
 - [ ] T154 [P] Escribir la prueba de contenido de las reglas de marca (sin "colombian", sin "kit", sin "!!", sin el número de marcas) y hacer la revisión manual de textos en `tests/php/integration/BrandRulesTest.php`
 - [ ] T155 Cerrar los pendientes legales con el abogado: política de datos, contratos de transmisión, RNBD, Ley 2300 y efecto del "Entregado" automático sobre el retracto (B-09). Si el abogado lo pide, ajustar `aralia_auto_complete_days`
 - [ ] T156 Desactivar la sincronización de compatibilidad de HPOS tras los E2E de los cuatro medios con HPOS como único almacenamiento (R-03)
@@ -447,6 +448,6 @@ Cuenta Wompi aprobada y AOC (T015), confirmación de Wompi sobre SAQ A (T071), a
 
 ## Notes
 
-- Total: **167 tareas**: Setup 19, Fundacional 60, US1 25, US2 11, US3 8, US4 4, US5 4, US6 3, US7 15, US8 4, Pulido 14.
+- Total: **168 tareas**: Setup 19, Fundacional 61, US1 25, US2 11, US3 8, US4 4, US5 4, US6 3, US7 15, US8 4, Pulido 14.
 - Las bajas de la revisión de la iteración 3 quedaron así: L-01 en T056 y T068; L-02 en T065 y T069; L-03 en T029; L-06 en T045; L-07 en T134. L-04, L-05 y L-08 ya se corrigieron en los artefactos.
 - Commit al cerrar cada tarea o grupo lógico; ninguna tarea del camino de pago se mezcla en el mismo commit con cambios de otra área.

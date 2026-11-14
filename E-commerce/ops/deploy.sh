@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
-# Despliegue de Aralía (research R-15, enmienda de la constitución 1.1.0).
+# Despliegue de Aralía (research R-15, constitución 1.2.0).
 #
 #   ops/deploy.sh package    <sha>   # lo usa el CI: arma release/aralia-<sha>.tar.gz (+ .sha256)
 #   ops/deploy.sh staging    <sha>   # Sara, desde su equipo
 #   ops/deploy.sh production <sha>   # Sara, desde su equipo
 #   ops/deploy.sh rollback   <sha>   # vuelta atrás a un SHA ya desplegado antes en producción (paquete guardado local)
 #
+# staging, production y rollback SOLO se ejecutan desde el lanzador de confianza ~/.aralia-deploy/bin/deploy.sh
+# (fuera del repositorio, permisos 700). Si corrieran desde el árbol de trabajo, un commit sin revisar podría
+# reescribir las comprobaciones que lo revisan, con la llave de producción en el ssh-agent. El lanzador se instala a
+# mano la primera vez desde el commit aprobado (ops/runbooks/deploy.md) y se actualiza solo tras un despliegue a
+# producción verificado, con el deploy.sh de ese commit (que la propia puerta exigió revisado). `package` (CI) no lo necesita.
+#
 # Por qué local y no en GitHub Actions: con el plan Free en un repo privado no hay environments protegidos
 # ni protección de rama, así que una llave SSH guardada en GitHub quedaría al alcance de cualquier rama.
 # La llave vive solo en el equipo de Sara (ssh-agent) y la "aprobación manual" es que ella ejecute esto.
 #
 # Antes de copiar un solo archivo, el script exige:
-#   1. que <sha> esté en origin/main y que este script sea idéntico al de <sha> (staging) o al del ÚLTIMO despliegue
-#      a producción (producción: la puerta no puede ser editada por el commit que se revisa);
+#   1. que <sha> esté en origin/main y que se ejecute el lanzador de confianza (ver arriba);
 #   2. CI en verde para <sha> (push a main) y el paquete de ese run con su SHA-256 correcto;
 #   3. producción: que <sha> ya se haya desplegado y verificado en staging;
 #   4. producción: que TODO commit desde el último despliegue (salvo documentación exenta, ver REVIEW_EXEMPT)
@@ -20,8 +25,9 @@
 #      DISTINTO de la autora. La lista se lee del último despliegue a producción (no del commit a desplegar);
 #      el alta de la primera revisora exige una confirmación escrita de Sara (ALTA-REVISORA);
 #   5. una simulación (rsync -n) que Sara revisa y confirma.
-# Solo sincroniza carpetas propias o fijadas por Composer, cada una con --delete acotado a sí misma:
-# nunca toca .htaccess, .user.ini, wordfence-waf.php, .well-known, wp-config.php, uploads, wflogs,
+# Solo despliega CÓDIGO PROPIO: el plugin aralia-core, el tema aralia y los mu-plugins aralia-*, cada uno con --delete
+# acotado a sí mismo. WordPress, WooCommerce, Wompi, Wordfence y LiteSpeed los instala y actualiza Hostinger/wp-admin;
+# nunca se tocan, ni .htaccess, .user.ini, wordfence-waf.php, .well-known, wp-config.php, uploads, wflogs,
 # caché de LiteSpeed, idiomas, updraft ni UpdraftPlus.
 #
 # Configuración (no secreta, ignorada por git): ops/deploy.conf, a partir de ops/deploy.conf.sample.
@@ -35,7 +41,8 @@ PROJECT_REL="E-commerce"
 REPO_ROOT="$(cd "$PROJECT_DIR/.." && pwd)"
 # Compatible con el bash 3.2 de macOS (sin mapfile ni arrays asociativos).
 
-# Plugins de terceros que se despliegan (lista cerrada, R-15). UpdraftPlus Premium se instala a mano y no se toca.
+# Plugins de terceros que se instalan y actualizan en Hostinger (lista cerrada, R-15). Este script NO los despliega ni
+# los toca: solo comprueba su integridad en el servidor tras desplegar. UpdraftPlus Premium se instala a mano.
 THIRD_PARTY_PLUGINS=(woocommerce wompi-portal-de-pagos wordfence litespeed-cache)
 
 # Revisión obligatoria para TODO el repo salvo documentación que no se despliega ni controla el despliegue.
@@ -54,6 +61,7 @@ REVIEW_GENESIS="e982219344a1a620f0efbc731c5b926f011e4092"
 # Registro de despliegues: EN EL EQUIPO DE SARA, no en el servidor (código desplegado en staging o producción
 # podría escribir en un registro del servidor y falsear "último despliegue").
 LOCAL_LOG_DIR="$HOME/.aralia-deploy"
+TRUSTED_DIR="$LOCAL_LOG_DIR/bin"
 
 die()  { printf '✖ %s\n' "$*" >&2; exit 1; }
 info() { printf '• %s\n' "$*"; }
@@ -63,6 +71,9 @@ sha256_of() {
 }
 
 valid_sha() { [[ "${1:-}" =~ ^[0-9a-f]{40}$ ]]; }
+
+# Modo octal de un archivo. Primero la sintaxis de GNU: `stat -f` en Linux imprime el estado del sistema de archivos y sale con 0.
+file_mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 
 # El rsync de macOS (openrsync) no soporta --chmod: hace falta rsync 3 (brew install rsync).
 require_rsync3() {
@@ -75,21 +86,13 @@ require_rsync3() {
 # ---------------------------------------------------------------------------------------------- package
 
 package_release() {
-	local sha="$1" out="$PROJECT_DIR/release" stage
+	local sha="$1" out="$PROJECT_DIR/release" stage m
 	valid_sha "$sha" || die "SHA inválido"
-	[ -f "$PROJECT_DIR/wp/wp-load.php" ] || die "Falta wp/ (composer install)"
 
 	stage="$(mktemp -d)"
 	mkdir -p "$stage/wp-content/plugins" "$stage/wp-content/themes" "$stage/wp-content/mu-plugins" "$out"
 
-	cp -R "$PROJECT_DIR/wp" "$stage/wp"
-	rm -f "$stage/wp/wp-config.php" "$stage/wp/wp-config-sample.php"
-
-	local p
-	for p in "${THIRD_PARTY_PLUGINS[@]}"; do
-		[ -d "$PROJECT_DIR/wp-content/plugins/$p" ] || die "Falta el plugin $p (composer install)"
-		cp -R "$PROJECT_DIR/wp-content/plugins/$p" "$stage/wp-content/plugins/$p"
-	done
+	# Solo código propio. El núcleo de WordPress y los plugins de terceros los instala y actualiza Hostinger.
 	if [ -f "$PROJECT_DIR/wp-content/plugins/aralia-core/aralia-core.php" ]; then
 		cp -R "$PROJECT_DIR/wp-content/plugins/aralia-core" "$stage/wp-content/plugins/aralia-core"
 		rm -rf "$stage/wp-content/plugins/aralia-core/blocks" "$stage/wp-content/plugins/aralia-core/node_modules"
@@ -97,7 +100,6 @@ package_release() {
 	if [ -f "$PROJECT_DIR/wp-content/themes/aralia/style.css" ]; then
 		cp -R "$PROJECT_DIR/wp-content/themes/aralia" "$stage/wp-content/themes/aralia"
 	fi
-	local m
 	for m in "$PROJECT_DIR"/wp-content/mu-plugins/aralia-*; do
 		[ -e "$m" ] || continue
 		case "$(basename "$m")" in
@@ -107,11 +109,12 @@ package_release() {
 		cp -R "$m" "$stage/wp-content/mu-plugins/"
 	done
 	find "$stage" -name '.gitkeep' -delete
+	[ -n "$(find "$stage/wp-content" -type f)" ] || die "No hay código propio que empaquetar"
 
 	{
 		echo "sha=$sha"
 		echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-		echo "plugins=${THIRD_PARTY_PLUGINS[*]}"
+		echo "scope=own-code"
 	} > "$stage/MANIFEST"
 
 	tar -czf "$out/aralia-$sha.tar.gz" -C "$stage" .
@@ -130,9 +133,9 @@ on_target() {
 
 # Copia el paquete extraído ($1) a la raíz de WordPress del destino. $2 host ("" local), $3 ruta, $4 "-n" para simular.
 sync_release() {
-	local src="$1" host="$2" path="$3" dry="${4:-}" dest
+	local src="$1" host="$2" path="$3" dry="${4:-}" dest d n
 	if [ -z "$path" ] || [ "$path" = "/" ]; then die "Ruta de destino vacía o /"; fi
-	[ -f "$src/wp/wp-load.php" ] || die "Paquete sin wp/"
+	[ -d "$src/wp-content" ] || die "Paquete sin wp-content/"
 	if [ -z "$host" ]; then dest="$path"; else dest="$host:$path"; fi
 	require_rsync3
 
@@ -144,15 +147,8 @@ sync_release() {
 	[ "$dry" = "-n" ] && R+=(-n)
 	export RSYNC_RSH="ssh -o StrictHostKeyChecking=yes"
 
-	# Núcleo: wp-admin y wp-includes son de WordPress (se limpian); los archivos sueltos de la raíz, sin --delete.
-	# Cada orden termina en "|| return 1": dentro de una función llamada con "|| die", bash ignora set -e.
-	"${R[@]}" --delete "$src/wp/wp-admin/"    "$dest/wp-admin/"    || return 1
-	"${R[@]}" --delete "$src/wp/wp-includes/" "$dest/wp-includes/" || return 1
-	"${R[@]}" --exclude='/wp-admin/' --exclude='/wp-includes/' --exclude='/wp-content/' \
-		--exclude='/wp-config.php' --exclude='/.htaccess' --exclude='/.user.ini' \
-		"$src/wp/" "$dest/" || return 1
-
-	local d n
+	# Solo código propio, cada pieza con --delete acotado a sí misma. Cada orden termina en "|| return 1":
+	# dentro de una función llamada con "|| die", bash ignora set -e.
 	for d in "$src"/wp-content/plugins/*/ "$src"/wp-content/themes/*/; do
 		[ -d "$d" ] || continue
 		n="${d#"$src"/}"
@@ -168,36 +164,47 @@ sync_release() {
 
 # ---------------------------------------------------------------------------------------------- deploy
 
-REPO=""; STAGING_SSH=""; STAGING_PATH=""; PRODUCTION_SSH=""; PRODUCTION_PATH=""
+REPO=""; REPO_DIR=""; STAGING_SSH=""; STAGING_PATH=""; PRODUCTION_SSH=""; PRODUCTION_PATH=""
 ALLOW_SHARED_STAGING=""; ALLOW_UNPROTECTED_MAIN=""
 
 # Lee KEY="valor" sin ejecutar nada (deploy.conf no es código) y valida cada valor.
 parse_conf() {
 	local conf="$1" line key val
-	[ -f "$conf" ] || die "Falta ops/deploy.conf (copiar de ops/deploy.conf.sample)"
+	[ -f "$conf" ] || die "Falta $conf (copiar de ops/deploy.conf.sample)"
 	while IFS= read -r line || [ -n "$line" ]; do
+		line="${line%$'\r'}"
 		case "$line" in ''|'#'*) continue ;; esac
-		[[ "$line" =~ ^([A-Z_]+)=\"([^\"]*)\"$ ]] || die "deploy.conf: línea no válida (solo CLAVE=\"valor\"): $line"
+		[[ "$line" =~ ^([A-Z_]+)=\"([^\"]*)\"$ ]] || die "deploy.conf: línea no válida (solo CLAVE=\"valor\", sin espacios finales ni CRLF): $line"
 		key="${BASH_REMATCH[1]}"; val="${BASH_REMATCH[2]}"
 		case "$key" in
 			REPO)                         [[ "$val" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || die "deploy.conf: REPO inválido" ;;
 			STAGING_SSH|PRODUCTION_SSH)   [[ "$val" =~ ^[A-Za-z0-9._@][A-Za-z0-9._@-]*$ ]] || die "deploy.conf: $key inválido" ;;
-			STAGING_PATH|PRODUCTION_PATH) [[ "$val" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "deploy.conf: $key inválido (solo letras, números . _ - /)" ;;
+			STAGING_PATH|PRODUCTION_PATH)
+				[[ "$val" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "deploy.conf: $key inválido (solo letras, números . _ - /)"
+				case "$val" in *..*|*//*|*/./*|*/.) die "deploy.conf: $key no puede contener .., // ni /./" ;; esac ;;
+			REPO_DIR)
+				case "$val" in /*) ;; *) die "deploy.conf: REPO_DIR debe ser una ruta absoluta" ;; esac
+				case "$val" in *[\"\'\`\$\\]*|*..*) die "deploy.conf: REPO_DIR con caracteres no permitidos" ;; esac ;;
 			ALLOW_SHARED_STAGING|ALLOW_UNPROTECTED_MAIN) [ "$val" = yes ] || die "deploy.conf: $key solo admite \"yes\"" ;;
 			*) die "deploy.conf: clave desconocida $key" ;;
 		esac
 		printf -v "$key" '%s' "$val"
 	done < "$conf"
-	[ -n "$REPO" ] && [ -n "$STAGING_SSH" ] && [ -n "$STAGING_PATH" ] && [ -n "$PRODUCTION_SSH" ] && [ -n "$PRODUCTION_PATH" ] \
-		|| die "deploy.conf: faltan claves (REPO, STAGING_SSH, STAGING_PATH, PRODUCTION_SSH, PRODUCTION_PATH)"
+	[ -n "$REPO" ] && [ -n "$REPO_DIR" ] && [ -n "$STAGING_SSH" ] && [ -n "$STAGING_PATH" ] && [ -n "$PRODUCTION_SSH" ] && [ -n "$PRODUCTION_PATH" ] \
+		|| die "deploy.conf: faltan claves (REPO, REPO_DIR, STAGING_SSH, STAGING_PATH, PRODUCTION_SSH, PRODUCTION_PATH)"
 	return 0
 }
 
 load_conf() {
-	local conf="$SCRIPT_DIR/deploy.conf" mode origin
+	local conf="$LOCAL_LOG_DIR/deploy.conf" mode origin top
 	parse_conf "$conf"
-	mode="$(stat -f %Lp "$conf" 2>/dev/null || stat -c %a "$conf")"
-	[ "$mode" = 600 ] || die "ops/deploy.conf debe tener permisos 600 (chmod 600 ops/deploy.conf); tiene $mode"
+	mode="$(file_mode "$conf")"
+	[ "$mode" = 600 ] || die "$conf debe tener permisos 600 (chmod 600); tiene $mode"
+	# El clon se toma de la configuración (fuera del repositorio), no de la ubicación del script.
+	top="$(git -C "$REPO_DIR" rev-parse --show-toplevel 2>/dev/null)" || die "REPO_DIR ($REPO_DIR) no es un repositorio git"
+	[ "$top" = "$(cd "$REPO_DIR" && pwd -P)" ] || die "REPO_DIR debe ser la raíz del repositorio"
+	[ -d "$top/$PROJECT_REL/ops" ] || die "REPO_DIR no contiene $PROJECT_REL/ops"
+	REPO_ROOT="$top"; PROJECT_DIR="$top/$PROJECT_REL"
 	origin="$(git -C "$REPO_ROOT" remote get-url origin)"
 	case "$origin" in *"github.com/$REPO"|*"github.com/$REPO.git"|*"github.com:$REPO"|*"github.com:$REPO.git") ;; *) die "REPO ($REPO) no coincide con el remoto origin ($origin)" ;; esac
 	return 0
@@ -207,59 +214,88 @@ load_conf() {
 ssh_identity() { ssh -G "$1" 2>/dev/null | awk '$1=="user"||$1=="hostname"{printf "%s ", $2}'; }
 
 # Condiciones de la primera salida a producción (decisiones de Sara; ver ops/compliance/accounts-2fa.md).
-check_production_prereqs() {
+# Staging y producción no pueden compartir cuenta ni solaparse (el código de staging se despliega sin la revisión de producción).
+check_destinations() {
 	if [ "$STAGING_SSH" = "$PRODUCTION_SSH" ] || [ "$(ssh_identity "$STAGING_SSH")" = "$(ssh_identity "$PRODUCTION_SSH")" ]; then
 		if [ "$STAGING_PATH" = "$PRODUCTION_PATH" ] || [[ "$STAGING_PATH/" == "$PRODUCTION_PATH/"* ]] || [[ "$PRODUCTION_PATH/" == "$STAGING_PATH/"* ]]; then
-			die "STAGING_PATH y PRODUCTION_PATH son iguales o están anidados: staging podría pisar producción"
+			die "STAGING_PATH y PRODUCTION_PATH son iguales o están anidados en la misma cuenta: staging podría pisar producción"
 		fi
 		[ "$ALLOW_SHARED_STAGING" = yes ] \
 			|| die "Staging y producción usan la misma cuenta SSH: el código de staging (sin revisión) podría leer los secretos de producción. Separa las cuentas (ops/compliance/accounts-2fa.md) o, bajo tu responsabilidad, ALLOW_SHARED_STAGING=\"yes\" en deploy.conf"
 		info "AVISO: ALLOW_SHARED_STAGING=yes (staging comparte cuenta con producción)"
 	fi
-	if ! gh api "repos/$REPO/branches/main/protection" >/dev/null 2>&1; then
+	return 0
+}
+
+# Condiciones de la primera salida a producción (decisiones de Sara; ver ops/compliance/accounts-2fa.md).
+check_production_prereqs() {
+	local prot
+	gh auth status >/dev/null 2>&1 || die "gh no tiene sesión (gh auth login)"
+	prot="$(gh api "repos/$REPO/branches/main/protection" --jq '((.required_pull_request_reviews != null) and (.allow_force_pushes.enabled == false))' 2>/dev/null || true)"
+	if [ "$prot" != true ]; then
 		[ "$ALLOW_UNPROTECTED_MAIN" = yes ] \
-			|| die "La rama main no tiene protección (GitHub Pro/Team): sin ella cualquiera con Write puede empujar sin PR. Actívala o, bajo tu responsabilidad, ALLOW_UNPROTECTED_MAIN=\"yes\" en deploy.conf"
-		info "AVISO: ALLOW_UNPROTECTED_MAIN=yes (main sin protección de rama)"
+			|| die "La rama main no exige PR con revisión ni bloquea el force-push (GitHub Pro/Team). Actívalo o, bajo tu responsabilidad, ALLOW_UNPROTECTED_MAIN=\"yes\" en deploy.conf"
+		info "AVISO: ALLOW_UNPROTECTED_MAIN=yes (main sin protección de rama efectiva)"
 	fi
 	return 0
+}
+
+# Solo se ejecuta el lanzador de confianza, fuera del repositorio y sin permisos de escritura para otros.
+require_trusted_launcher() {
+	local mode
+	[ "$SCRIPT_DIR" = "$TRUSTED_DIR" ] \
+		|| die "Ejecuta el lanzador de confianza $TRUSTED_DIR/deploy.sh, no el script del árbol de trabajo (ops/runbooks/deploy.md, «Instalar el lanzador»)"
+	mode="$(file_mode "$SELF")"
+	[ $((8#$mode & 8#022)) -eq 0 ] || die "El lanzador no debe tener permisos de escritura para grupo u otros (chmod 700 $SELF)"
+	return 0
+}
+
+# Tras un despliegue a producción verificado, el lanzador pasa a ser el deploy.sh de ese commit (que la puerta exigió revisado).
+install_launcher() {
+	local sha="$1" tmpf
+	mkdir -p "$TRUSTED_DIR" && chmod 700 "$LOCAL_LOG_DIR" "$TRUSTED_DIR"
+	tmpf="$(mktemp "$TRUSTED_DIR/.deploy.XXXXXX")"
+	git -C "$REPO_ROOT" show "$sha:$PROJECT_REL/ops/deploy.sh" > "$tmpf" || { rm -f "$tmpf"; die "No se pudo leer deploy.sh de $sha"; }
+	bash -n "$tmpf" || { rm -f "$tmpf"; die "El deploy.sh de $sha no es válido: el lanzador no se actualiza"; }
+	chmod 700 "$tmpf" && mv -f "$tmpf" "$TRUSTED_DIR/deploy.sh"
+	info "Lanzador de confianza actualizado al deploy.sh de ${sha:0:7} (sha256 $(sha256_of "$TRUSTED_DIR/deploy.sh"))"
 }
 
 deploy_log() { echo "$LOCAL_LOG_DIR/$1.log"; }
 
 # Último SHA registrado para un destino (vacío si no hay registro o está vacío).
+# Último SHA desplegado y VERIFICADO en un destino (los rollback no mueven el ancla de confianza).
 last_deployed() {
 	local f; f="$(deploy_log "$1")"
 	[ -f "$f" ] || return 0
-	grep -v '^[[:space:]]*$' "$f" | tail -n 1 | cut -d' ' -f2 || true
+	awk '$4=="verified" { l=$2 } END { if (l != "") print l }' "$f"
 }
 
+# El SHA a desplegar debe estar en origin/main.
 check_source() {
-	local sha="$1" target="$2" ref="$1" last
-	git -C "$PROJECT_DIR" fetch --quiet origin main
-	git -C "$PROJECT_DIR" merge-base --is-ancestor "$sha" origin/main || die "$sha no está en origin/main"
-	# Producción ejecuta la puerta del ÚLTIMO despliegue: un commit no puede reescribir la comprobación que lo revisa.
-	if [ "$target" = production ]; then
-		last="$(last_deployed production)"
-		if [ -n "$last" ]; then valid_sha "$last" || die "Registro de producción corrupto: '$last'"; ref="$last"; fi
-	fi
-	git -C "$PROJECT_DIR" show "$ref:$PROJECT_REL/ops/deploy.sh" | cmp -s - "$SELF" \
-		|| die "Este deploy.sh difiere del de $ref. Para ese despliegue usa el script correspondiente: git show $ref:$PROJECT_REL/ops/deploy.sh > ops/deploy.last.sh && bash ops/deploy.last.sh $target $sha  (un cambio de deploy.sh entra en vigor en el despliegue siguiente)"
+	local sha="$1"
+	git -C "$REPO_ROOT" fetch --quiet origin main || die "No se pudo actualizar origin/main"
+	git -C "$REPO_ROOT" merge-base --is-ancestor "$sha" origin/main || die "$sha no está en origin/main"
 	return 0
 }
 
 # El código propio del paquete debe ser idéntico al del árbol de git en <sha>, sin extras. El CI genera el paquete
 # y su SHA-256: el hash solo prueba integridad del transporte, no autenticidad.
 verify_own_code() {
-	local sha="$1" dir="$2" x="$2/x" rel name e n=0 gdir cdir f
+	local sha="$1" dir="$2" x="$2/x" rel name e n=0 gdir cdir f ok
+	local asset_re="^<\\?php return array\\('dependencies' => array\\(('[a-z0-9@/._-]+'(, )?)*\\), 'version' => '[a-z0-9]+'\\);[[:space:]]*\$"
 	mkdir -p "$dir/git" "$dir/cmp"
 	[ -z "$(find "$x" -type l)" ] || die "El paquete contiene enlaces simbólicos"
 
-	# 1. Lista blanca exacta de componentes: lo que no esté en la lista cerrada o en git, no se despliega.
+	# 1. Lista blanca exacta de componentes y nombres seguros: solo código propio que exista en git; el resto lo instala Hostinger.
+	for e in "$x"/wp-content/plugins/* "$x"/wp-content/themes/* "$x"/wp-content/mu-plugins/*; do
+		[ -e "$e" ] || continue
+		[[ "$(basename "$e")" =~ ^[A-Za-z0-9._-]+$ ]] || die "Nombre no permitido en el paquete: $(basename "$e")"
+	done
 	for e in "$x"/wp-content/plugins/*; do
-		[ -e "$e" ] || continue; name="$(basename "$e")"
-		case " ${THIRD_PARTY_PLUGINS[*]} " in *" $name "*) continue ;; esac
-		[ "$name" = aralia-core ] && git -C "$REPO_ROOT" cat-file -e "$sha:$PROJECT_REL/wp-content/plugins/aralia-core" 2>/dev/null && continue
-		die "Plugin no permitido en el paquete: $name"
+		[ -e "$e" ] || continue; name="$(basename "$e")"; ok=no
+		if [ "$name" = aralia-core ] && git -C "$REPO_ROOT" cat-file -e "$sha:$PROJECT_REL/wp-content/plugins/aralia-core" 2>/dev/null; then ok=yes; fi
+		[ "$ok" = yes ] || die "Plugin no permitido en el paquete: $name"
 	done
 	for e in "$x"/wp-content/themes/*; do
 		[ -e "$e" ] || continue; name="$(basename "$e")"
@@ -278,21 +314,25 @@ verify_own_code() {
 		name="$(basename "$rel")"; gdir="$dir/git/$PROJECT_REL/$rel"; cdir="$dir/cmp/$name"
 		git -C "$REPO_ROOT" archive "$sha" "$PROJECT_REL/$rel" | tar -x -C "$dir/git"
 		cp -R "$x/$rel" "$cdir"
-		# Artefactos de build permitidos solo en la raíz del componente y solo de tipos no ejecutables
-		# (más *.asset.php de una sola línea, "<?php return array(...);", que genera @wordpress/scripts).
+		# build/ solo en la raíz del componente y solo de tipos no ejecutables; los *.asset.php deben ser EXACTAMENTE
+		# una línea con la forma que genera @wordpress/scripts (sin llamadas a funciones).
 		if [ -d "$cdir/build" ]; then
 			while IFS= read -r f; do
 				case "$f" in
 					*.js|*.css|*.json|*.map|*.svg|*.png|*.jpg|*.woff2) ;;
-					*.asset.php) [ "$(wc -l < "$f")" -le 1 ] && grep -Eq '^<\?php return array\([^;]*\);[[:space:]]*$' "$f" || die "build/ con PHP no permitido: $f" ;;
+					*.asset.php)
+						{ [ "$(grep -c '' "$f")" -eq 1 ] && grep -Eq "$asset_re" "$f"; } || die "build/ con PHP no permitido: $f" ;;
 					*) die "build/ con archivo no permitido: $f" ;;
 				esac
 			done < <(find "$cdir/build" -type f)
 			rm -rf "$cdir/build"
 		fi
-		# Igual que package_release: blocks/ y node_modules/ de la raíz no viajan.
-		rm -rf "$cdir/blocks" "$cdir/node_modules" "$gdir/blocks" "$gdir/node_modules" "$gdir/build"
-		diff -r -x .gitkeep "$gdir" "$cdir" >/dev/null || die "El paquete difiere del árbol de git en $rel (¿workflow o build alterado?)"
+		rm -rf "$gdir/build"
+		# package_release excluye blocks/ y node_modules/ SOLO de aralia-core: si el paquete los trae, diff -r falla.
+		if [ "$name" = aralia-core ]; then rm -rf "$gdir/blocks" "$gdir/node_modules"; fi
+		# Marcadores .gitkeep: solo archivos (un directorio llamado .gitkeep no se excluye).
+		find "$gdir" "$cdir" -type f -name .gitkeep -delete
+		diff -r "$gdir" "$cdir" >/dev/null || die "El paquete difiere del árbol de git en $rel (¿workflow o build alterado?)"
 		n=$((n+1))
 	done
 
@@ -325,8 +365,12 @@ unpack_release() {
 	expected="$(cut -d' ' -f1 < "$dir/aralia-$sha.tar.gz.sha256")"
 	actual="$(sha256_of "$dir/aralia-$sha.tar.gz")"
 	[ "$expected" = "$actual" ] || die "SHA-256 del paquete no coincide"
+	# Antes de extraer: solo archivos y directorios (nada de enlaces simbólicos/duros ni dispositivos) y sin rutas absolutas ni "..".
+	if tar -tvzf "$dir/aralia-$sha.tar.gz" | cut -c1 | grep -q '[^-d]'; then die "El paquete contiene entradas que no son archivos ni directorios"; fi
+	if tar -tzf "$dir/aralia-$sha.tar.gz" | grep -Eq '(^|/)\.\.(/|$)|^/'; then die "El paquete contiene rutas absolutas o con .."; fi
 	mkdir -p "$dir/x" && tar -xzf "$dir/aralia-$sha.tar.gz" -C "$dir/x"
 	grep -qx "sha=$sha" "$dir/x/MANIFEST" || die "El MANIFEST no corresponde a $sha"
+	return 0
 }
 
 # Lista de revisoras (logins en minúscula, una por línea, formato válido) tal como está en un commit.
@@ -342,7 +386,7 @@ check_payment_reviews() {
 	last="$(last_deployed production)"
 	if [ -n "$last" ]; then
 		valid_sha "$last" || die "Registro de producción corrupto: '$last'"
-		git -C "$REPO_ROOT" cat-file -e "$last^{commit}" 2>/dev/null || die "El último despliegue $last no existe en este clon (git fetch)"
+		git -C "$REPO_ROOT" cat-file -e "$last^{commit}" 2>/dev/null || die "Falta el commit del último despliegue ($last) en este clon: git fetch origin"
 		git -C "$REPO_ROOT" merge-base --is-ancestor "$last" "$sha" || die "$sha no desciende del último despliegue $last (para volver atrás usa: ops/deploy.sh rollback <sha>)"
 		base="$last"
 	else
@@ -350,6 +394,8 @@ check_payment_reviews() {
 		valid_sha "$REVIEW_GENESIS" || die "REVIEW_GENESIS inválido"
 		git -C "$REPO_ROOT" cat-file -e "$REVIEW_GENESIS^{commit}" 2>/dev/null || die "REVIEW_GENESIS no existe en este clon (git fetch)"
 		git -C "$REPO_ROOT" merge-base --is-ancestor "$REVIEW_GENESIS" "$sha" || die "$sha no desciende de REVIEW_GENESIS"
+		# El génesis debe ser el commit inicial del repositorio: un commit revisado no puede moverlo para excluir historia.
+		git -C "$REPO_ROOT" rev-list --max-parents=0 "$sha" | grep -qx "$REVIEW_GENESIS" || die "REVIEW_GENESIS no es el commit inicial de $sha"
 		base="$REVIEW_GENESIS"
 	fi
 	range="$base..$sha"
@@ -385,8 +431,10 @@ check_payment_reviews() {
 			[ -n "$n" ] || continue
 			head="$(gh api "repos/$REPO/pulls/$n" --jq .head.sha)" || die "No se pudo consultar el PR #$n"
 			# Quien aprueba no puede haber escrito commits del PR (ni abrirlo).
-			prauthors="$(gh api "repos/$REPO/pulls/$n/commits" --paginate --jq '.[] | ((.author.login // "") , (.committer.login // ""))' | tr 'A-Z' 'a-z')" \
+			prauthors="$(gh api "repos/$REPO/pulls/$n/commits" --paginate --jq '.[] | ((.author.login // "NULL") , (.committer.login // "NULL"))' | tr 'A-Z' 'a-z')" \
 				|| die "No se pudo consultar los commits del PR #$n"
+			# Un commit cuyo correo no está vinculado a una cuenta de GitHub no se puede atribuir: no se acepta.
+			if grep -qx 'null' <<<"$prauthors"; then die "El PR #$n tiene commits sin cuenta de GitHub asociada: no se puede verificar la independencia de la revisión"; fi
 			prauthors="$(printf '%s\n%s\n' "$prauthors" "$(echo "$author" | tr 'A-Z' 'a-z')")"
 			# Último estado de cada persona (las reseñas llegan en orden cronológico); solo cuenta APPROVED sobre el último commit.
 			reviews="$(gh api "repos/$REPO/pulls/$n/reviews" --paginate \
@@ -420,7 +468,7 @@ cleanup() { [ -n "$DEPLOY_TMP" ] && rm -rf "$DEPLOY_TMP"; return 0; }
 
 # Simulación, confirmación, copia, verificación y registro (compartido por deploy y rollback).
 apply_release() {
-	local target="$1" sha="$2" tmp="$3" host="$4" path="$5" kind="$6" confirm="$7" answer nchanges ndel
+	local target="$1" sha="$2" tmp="$3" host="$4" path="$5" kind="$6" confirm="$7" answer nchanges ndel flags=""
 	info "Simulación en $target ($host:$path):"
 	sync_release "$tmp/x" "$host" "$path" -n > "$tmp/dry-run.txt" || die "La simulación falló (ruta, ssh o rsync); no se despliega nada"
 	nchanges="$(grep -vc '^\.' "$tmp/dry-run.txt" || true)"
@@ -439,22 +487,27 @@ apply_release() {
 	if [ "$target" = production ] && [ "$kind" = verified ]; then
 		cp "$tmp/aralia-$sha.tar.gz" "$tmp/aralia-$sha.tar.gz.sha256" "$LOCAL_LOG_DIR/releases/"
 	fi
-	printf '%s %s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$sha" "$(git config user.email || whoami)" "$kind" >> "$(deploy_log "$target")"
+	# Las aceptaciones de riesgo vigentes quedan escritas junto al despliegue.
+	[ "$ALLOW_SHARED_STAGING" = yes ] && flags="$flags ALLOW_SHARED_STAGING"
+	[ "$ALLOW_UNPROTECTED_MAIN" = yes ] && flags="$flags ALLOW_UNPROTECTED_MAIN"
+	printf '%s %s %s %s launcher=%s allow=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$sha" "$(git config user.email || whoami)" "$kind" \
+		"$(sha256_of "$SELF")" "${flags# }" >> "$(deploy_log "$target")"
 	info "Desplegado y verificado en $target ($kind): $sha"
+	if [ "$target" = production ] && [ "$kind" = verified ]; then install_launcher "$sha"; fi
+	return 0
 }
 
 deploy() {
 	local target="$1" sha="$2" host path tmp
 	valid_sha "$sha" || die "Uso: ops/deploy.sh $target <sha de 40 caracteres>"
+	require_trusted_launcher
 	load_conf
 	if [ "$target" = production ]; then host="$PRODUCTION_SSH"; path="$PRODUCTION_PATH"; else host="$STAGING_SSH"; path="$STAGING_PATH"; fi
 	command -v gh >/dev/null || die "Falta gh (GitHub CLI): brew install gh && gh auth login"
 
-	check_source "$sha" "$target"
-	if [ "$target" = production ]; then check_production_prereqs
-	elif [ "$STAGING_SSH" = "$PRODUCTION_SSH" ] || [ "$(ssh_identity "$STAGING_SSH")" = "$(ssh_identity "$PRODUCTION_SSH")" ]; then
-		info "AVISO: staging y producción usan la misma cuenta SSH: el código de staging puede leer los secretos de producción (ops/compliance/accounts-2fa.md)."
-	fi
+	check_source "$sha"
+	check_destinations
+	if [ "$target" = production ]; then check_production_prereqs; fi
 	DEPLOY_TMP="$(mktemp -d)"; tmp="$DEPLOY_TMP"; trap cleanup EXIT
 	fetch_release "$sha" "$tmp"
 
@@ -472,13 +525,16 @@ deploy() {
 rollback() {
 	local sha="$1" tmp rel
 	valid_sha "$sha" || die "Uso: ops/deploy.sh rollback <sha de 40 caracteres>"
+	require_trusted_launcher
 	load_conf
 	grep -q " $sha " "$(deploy_log production)" 2>/dev/null || die "$sha no figura en el registro de producción: solo se puede volver a un SHA ya desplegado"
 	rel="$LOCAL_LOG_DIR/releases"
 	[ -f "$rel/aralia-$sha.tar.gz" ] && [ -f "$rel/aralia-$sha.tar.gz.sha256" ] || die "No hay paquete guardado de $sha en $rel"
+	git -C "$REPO_ROOT" cat-file -e "$sha^{commit}" 2>/dev/null || die "Falta el commit $sha en este clon: git fetch origin"
 	DEPLOY_TMP="$(mktemp -d)"; tmp="$DEPLOY_TMP"; trap cleanup EXIT
 	cp "$rel/aralia-$sha.tar.gz" "$rel/aralia-$sha.tar.gz.sha256" "$tmp/"
 	unpack_release "$sha" "$tmp"
+	verify_own_code "$sha" "$tmp"
 	apply_release production "$sha" "$tmp" "$PRODUCTION_SSH" "$PRODUCTION_PATH" rollback "ROLLBACK ${sha:0:7}"
 }
 

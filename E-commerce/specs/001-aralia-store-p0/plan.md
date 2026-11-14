@@ -34,7 +34,7 @@ Tienda WooCommerce de producto propio, móvil primero, que **propone** looks com
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-La constitución del repo fue **ratificada v1.0.0 el 2026-11-13** y **enmendada a v1.1.0** el mismo día (despliegue local por plan Free de GitHub; régimen transitorio de la revisora; ver §Registro de iteraciones, iteración 4). La constitución provisional C1–C8 / T0-1…T0-5 (R-20) coincide con I–X. Un ✅ aquí significa "el diseño lo cubre"; las verificaciones que dependen de pruebas en Sandbox se listan como puertas de fase, no como supuestos.
+La constitución del repo fue **ratificada v1.0.0 el 2026-11-13** y **enmendada a v1.1.0** el mismo día (despliegue local por plan Free de GitHub; régimen transitorio de la revisora) y la **v1.2.0 está propuesta** (revisión humana de todo el repo; lanzador de confianza) a la espera de la aprobación de Sara (ver §Registro de iteraciones, iteración 4). La constitución provisional C1–C8 / T0-1…T0-5 (R-20) coincide con I–X. Un ✅ aquí significa "el diseño lo cubre"; las verificaciones que dependen de pruebas en Sandbox se listan como puertas de fase, no como supuestos.
 
 | # | Principio / regla | Cómo lo cumple el plan | Post-diseño (iter. 2) |
 |---|-------------------|------------------------|-----------------------|
@@ -107,7 +107,7 @@ E-commerce/
     └── runbooks/                     # incident-response (SIC + causa raíz), restore, rotate-keys, access, patching (emergencia), refunds-reversals, nostock, duplicate-charge, sentinel, data-subject-requests, customer-replies
 ```
 
-**Structure Decision**: estructura WordPress estándar con solo código propio versionado; terceros por Composer con versiones fijas. Lógica en `aralia-core` (independiente del tema); el blindaje de pagos es un mu-plugin (no se puede desactivar desde el panel).
+**Structure Decision**: estructura WordPress estándar con solo código propio versionado; terceros (WordPress, WooCommerce, plugins) instalados y actualizados en Hostinger; Composer solo para pruebas y wp-env. Lógica en `aralia-core` (independiente del tema); el blindaje de pagos es un mu-plugin (no se puede desactivar desde el panel).
 
 ## Fases de entrega
 
@@ -145,7 +145,7 @@ E-commerce/
 | I-6 Exportaciones | Enlaces que caducan en 24 h (R-23) | Prueba |
 | T-5 XSS | Listas blancas + escape | Cargas XSS en regalo, vinilo, indicaciones |
 | T-6, E-5 Subidas | Validador CSV, MIME real, uploads sin PHP (R-09, R-23) | Pruebas |
-| T-9 Cadena de suministro | Composer fijado, staging, contrato del guard, SLA (R-15) | CI |
+| T-9 Cadena de suministro | Terceros gestionados en Hostinger con Wompi sin actualización automática, staging, contrato del guard, SLA (R-15) | CI |
 | E-4 Cuentas externas | `ops/compliance/accounts-2fa.md` | Checklist |
 | CM §5 ítems 1–7 | R-19, R-11, R-15 | Puertas de fases 1 y 5 |
 | CM §5 ítems 8–13 | R-15, R-19, `baseline-config.md` | CI + checklists |
@@ -153,12 +153,13 @@ E-commerce/
 
 ## Registro de iteraciones
 
-### Iteración 4 — implementación de la Fase 1 y enmienda 1.1.0 (2026-11-13)
+### Iteración 4 — implementación de la Fase 1, enmienda 1.1.0 y propuesta 1.2.0 (2026-11-13)
 
 | Hallazgo | Resolución | Artefacto |
 |----------|-----------|-----------|
 | GitHub Free no ofrece environments protegidos ni protección de rama en repos privados | Despliegue **local** `ops/deploy.sh`; la llave SSH no vive en GitHub; el CI solo arma el paquete | Constitución 1.1.0, R-15, T009 |
 | Gates T0 de la Fase 1, vueltas 2 y 3 (security, code-reviewer, architect + 6 verificaciones adversariales) | Criterio invertido: todo commit desde el último despliegue exige PR aprobado (salvo documentación exenta); lista de revisoras leída del último despliegue; registro de despliegues local; el paquete se compara con `git archive`; CI sin suites omitidas en silencio; cargador de secretos falla cerrado | `ops/deploy.sh`, `ecommerce-ci.yml`, `aralia-secrets-loader.php`, `tests/ops/deploy_test.sh` |
+| Gates T0 de la Fase 1, vuelta 4 (security, code-reviewer, architect) | Lanzador de confianza fuera del repo (`~/.aralia-deploy/bin/deploy.sh`) que se actualiza tras cada despliegue verificado; `REVIEW_GENESIS` = commit inicial; `rollback`; `build/` y componentes con lista blanca; destinos y protección de `main` exigidos, con `ALLOW_*` registrados; T166 y T167; RR-8 a RR-10 | `ops/deploy.sh`, threat-model §3, constitución 1.2.0 (propuesta) |
 
 ### Iteración 2 — respuesta a la revisión de arquitectura (iteración 1)
 
@@ -237,7 +238,6 @@ E-commerce/
 | N-11 centinela | Pedido centinela mensual en producción, aislado | R-11, runbook sentinel |
 | N-12 revisión humana después de abrir | Decidido por Sara: revisión humana obligatoria en cada cambio del camino de pago (CODEOWNERS; con plan Free lo hace cumplir `ops/deploy.sh`) | R-15 |
 | B-01, B-02 | Texto del spec alineado (AC 1.4, borde de pasarela caída, FR-060) | spec |
-| `ops/deploy.sh` (~400 líneas propias) | GitHub Free no protege environments ni ramas; una llave SSH en GitHub quedaría al alcance de cualquier rama (R-15, enmienda 1.1.0) | Actions + environment de producción: no existe en el plan Free. GitHub Pro/Team lo resolvería: es condición de la primera salida a producción (`deploy.sh` se niega sin protección de rama; T166) |
 | B-03 | `n` en cada apertura, 1–999, tope de 30 aperturas | R-10, contracts/wompi §3 |
 | B-04 | id persistido aunque esté `deferred`; idempotencia por estado verificado | R-02 §2b, contracts/wompi §3 |
 | B-05 | APPROVED sobre `cancelled` de más de 24 h: misma ruta con alerta | R-02 §3, data-model §3 |
@@ -270,3 +270,4 @@ E-commerce/
 | Vencimiento de pedidos propio | La cancelación nativa de WC no cumple FR-056 (R-06) | La reserva nativa vence sin consultar a Wompi |
 | Búsqueda propia | "corectol" → "corrector" (distancia 2) | Los plugins no la cubren sin un servicio externo |
 | 6 tablas propias | Idempotencia, consentimientos, auditoría, avisos y límites atómicos | Post meta no da unicidad ni atomicidad |
+| `ops/deploy.sh` (~700 líneas propias, con ~170 pruebas) | GitHub Free no protege environments ni ramas; una llave SSH en GitHub quedaría al alcance de cualquier rama (R-15, enmienda 1.1.0) | Actions + environment de producción: no existe en el plan Free. GitHub Pro/Team lo resolvería: es condición de la primera salida a producción (`deploy.sh` se niega sin protección de rama; T166) |

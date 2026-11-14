@@ -6,7 +6,7 @@
 cd "Documents/Aralía-web/E-commerce"
 
 # 1. Dependencias
-composer install          # WP core, WooCommerce, Wompi 3.2.1, plugins fijados
+composer install          # solo para pruebas/wp-env: WP core, WooCommerce, Wompi 3.2.1 (no se despliegan)
 npm ci
 
 # 2. Secretos de Sandbox (carpeta ignorada por git; wp-env la monta en wp-content/aralia-private/)

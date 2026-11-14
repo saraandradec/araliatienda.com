@@ -1,5 +1,6 @@
-# Copiar como ops/deploy.conf (ignorado por git) y `chmod 600 ops/deploy.conf`. No contiene secretos: la llave SSH vive
-# en ~/.ssh y ssh-agent. El script NO ejecuta este archivo: solo lee líneas CLAVE="valor" y valida cada valor.
+# Copiar como ~/.aralia-deploy/deploy.conf (FUERA del repositorio) y `chmod 600 ~/.aralia-deploy/deploy.conf`. No contiene
+# secretos: la llave SSH vive en ~/.ssh y ssh-agent. El script NO ejecuta este archivo: solo lee líneas CLAVE="valor"
+# (sin espacios finales) y valida cada valor.
 #
 # En ~/.ssh/config de Sara (Hostinger usa un puerto distinto de 22; confirmarlo en hPanel → SSH):
 #   Host aralia-prod
@@ -12,6 +13,8 @@
 #   Host aralia-staging  → OTRA cuenta/usuario de Hostinger, con su propia llave (ver abajo).
 
 REPO="saraandradec/araliatienda.com"
+# Ruta absoluta de tu clon del repositorio (raíz, donde está .git). El lanzador de confianza vive fuera del clon y la toma de aquí.
+REPO_DIR="/Users/<tu-usuario>/Documents/Aralía-web"
 
 # IMPORTANTE: usa una cuenta/usuario de Hostinger DISTINTA para staging (con su propia llave). El código de staging
 # se despliega sin la revisión de producción; en la misma cuenta podría leer los secretos y la base de datos de producción.

@@ -1,12 +1,12 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 → 1.1.1 (1.1.0 MINOR, 2026-11-13: régimen transitorio de la revisora humana; despliegue local por plan Free de GitHub. 1.1.1 PATCH, 2026-11-13: precisión del alcance tras los gates T0)
+- Version change: 1.0.0 → 1.2.0 (1.1.0 MINOR, 2026-11-13: régimen transitorio de la revisora humana; despliegue local por plan Free de GitHub. 1.2.0 MINOR, 2026-11-13: la revisión humana pasa de rutas del camino de pago a todo el repositorio; lanzador de confianza)
 - Enmienda 1.1.0: principio IX y Flujo de desarrollo ajustados (ver sección Enmiendas). Aprobada por Sara Andrade el 2026-11-13.
 - Principios: I. Tienda normal, bien hecha · II. Proponer antes que buscar · III. Un toque para un look · IV. Tono solo donde importa · V. Escasez y urgencia solo reales · VI. Cada compra abre la siguiente · VII. Autoservicio · VIII. Reglas de marca · IX. Dinero y datos seguros (T0) · X. Pruebas primero
 - Secciones agregadas: Restricciones técnicas · Flujo de desarrollo y gates · Governance
 - Secciones eliminadas: ninguna
 - Plantillas: ✅ plan-template.md (Constitution Check genérico, compatible) · ✅ spec-template.md (sin cambios) · ✅ tasks-template.md (pruebas obligatorias por X) · ✅ specs/001-aralia-store-p0/plan.md (la constitución provisional C1–C8 + T0-1…T0-5 coincide con I–X)
-- TODO: ninguno. Estado: RATIFICADA por Sara Andrade el 2026-11-13.
+- Estado: v1.0.0 RATIFICADA y v1.1.0 aprobada por Sara Andrade el 2026-11-13. **v1.2.0 PROPUESTA tras los gates T0: pendiente de aprobación explícita de Sara y registro en el ledger.**
 -->
 
 # Aralía Beauty Store Constitution
@@ -44,7 +44,7 @@ Todo texto público MUST NOT usar "colombiano/a" para describir la tienda ni los
 - Un pedido MUST pasar a pagado solo con verificación en el servidor: checksum del evento, consulta a la API de la pasarela y coincidencia de monto, moneda y referencia, con idempotencia y una máquina de estados que no retrocede.
 - Llaves y secretos MUST NOT estar en el navegador, la base de datos ni el repositorio.
 - Los datos personales se tratan según la Ley 1581: consentimiento probado, minimización, cifrado, purgas y derechos de la titular.
-- Todo cambio en el camino de pago (`aralia-wompi-guard`, `Orders/`, `Checkout/`, `Cart/`, `Rest/`) MUST tener la aprobación de la revisora técnica humana nombrada en `ops/payment-reviewers.txt` (y en CODEOWNERS) antes de llegar a producción. **Régimen transitorio (enmienda 1.1.0)**: hasta contratar a la revisora, Sara revisa durante la Fase 2 y la revisora revisa todo lo hecho antes de la primera salida; mientras esa lista esté vacía, producción queda bloqueada para el camino de pago. Con el plan Free de GitHub, CODEOWNERS no bloquea merges: lo hace cumplir `ops/deploy.sh`.
+- Todo cambio que llegue a producción (no solo el camino de pago: en WordPress todo el PHP corre en el mismo proceso) MUST venir de un PR aprobado por la revisora técnica humana nombrada en `ops/payment-reviewers.txt`, con las excepciones de documentación que fija `ops/deploy.sh` (`specs/` e `ops/inventory.md`). **Régimen transitorio (1.1.0)**: hasta contratar a la revisora, el trabajo se fusiona en la rama `integracion` (no se despliega) y ella aprueba un único PR `integracion` → `main`; mientras la lista esté vacía, producción queda bloqueada. Con el plan Free de GitHub, CODEOWNERS no bloquea merges: lo hace cumplir `ops/deploy.sh`, que solo corre desde un lanzador de confianza fuera del repositorio.
 
 ### X. Pruebas primero
 Las pruebas de cada tarea se escriben antes que el código y deben fallar antes de implementar. En el camino de pago y la seguridad, las pruebas MUST incluir casos de abuso (entrada maliciosa, actor no autorizado, fallo de una dependencia externa), no solo el caso feliz. Ningún resultado de prueba se da por bueno sin haberse ejecutado.
@@ -52,7 +52,7 @@ Las pruebas de cada tarea se escriben antes que el código y deben fallar antes 
 ## Restricciones técnicas
 
 - Plataforma: WordPress + WooCommerce en Hostinger; pasarela Wompi con el plugin oficial en versión fija + `aralia-wompi-guard`. Cambiar cualquiera de estas piezas es un cambio de alcance y exige reclasificar con `trace-classify`.
-- Terceros declarados con versión fija (Composer); un plugin nuevo requiere justificación en `ops/inventory.md`.
+- Terceros (WordPress, WooCommerce, Wompi, Wordfence, LiteSpeed): los instala y actualiza Hostinger/wp-admin; la versión probada se registra en `ops/inventory.md` y un plugin nuevo requiere justificación allí. El plugin de Wompi MUST tener la actualización automática desactivada y solo se actualiza tras pasar la prueba de contrato. Composer se usa únicamente para pruebas y wp-env.
 - Móvil primero (360 px con una mano), AA de accesibilidad y LCP < 2,5 s en móvil 4G.
 - Sin etiquetas de terceros en checkout, order-pay ni Gracias, salvo las excepciones aprobadas en el spec.
 - Animaciones con GSAP auto-alojado y respeto a `prefers-reduced-motion`.
@@ -70,8 +70,8 @@ Esta constitución prevalece sobre cualquier otra práctica del proyecto. Una en
 
 ### Enmiendas
 
-- **1.1.1 (2026-11-13, PATCH — aclaración, sin cambiar principios)** — Tras los gates T0 de la Fase 1: (1) el alcance de la revisión humana pasa de una lista de rutas a **todo el repositorio** salvo `specs/` e `ops/inventory.md`; (2) la puerta de producción se ejecuta con el script del último despliegue y la lista de revisoras se lee del último despliegue; (3) el alta inicial de la revisora solo existe en el primer despliegue (`ALTA-REVISORA`); (4) régimen transitorio operativo: el trabajo se fusiona en `integracion` y la revisora aprueba un único PR hacia `main`; (5) condiciones de la primera salida a producción (T166): staging en cuenta separada y protección de rama de GitHub. Aprobación de Sara pendiente de registrar en el ledger al firmar la fase.
+- **1.2.0 (2026-11-13, MINOR — ampliación material; PROPUESTA, pendiente de aprobación de Sara y de registro en el ledger)** — Tras los gates T0 de la Fase 1: (1) el alcance de la revisión humana pasa de una lista de rutas a **todo el repositorio** salvo `specs/` e `ops/inventory.md`; (2) `ops/deploy.sh` solo se ejecuta desde un lanzador de confianza fuera del repo, que se actualiza tras cada despliegue a producción verificado; (3) la lista de revisoras se lee del último despliegue y debe seguir vigente en el commit a desplegar; (4) el alta inicial de la revisora solo existe en el primer despliegue (`ALTA-REVISORA`); (5) régimen transitorio operativo con la rama `integracion`; (6) condiciones de la primera salida (T166): staging en cuenta separada y protección de rama de GitHub, que el script exige salvo aceptación escrita (`ALLOW_*`, registrada en el despliegue); (7) riesgos residuales RR-8 a RR-10 del threat model; (8) **el despliegue lleva solo código propio** (aralia-core, tema, mu-plugins `aralia-*`): WordPress y los plugins de terceros se instalan y actualizan en Hostinger, no se fijan ni se empaquetan desde el repositorio (cambia la regla de «terceros por Composer con versión fija» de Restricciones técnicas).
 
 - **1.1.0 (2026-11-13, Sara Andrade)** — *Motivo*: el repositorio privado está en el plan Free de GitHub, sin environments protegidos ni protección de rama, y la revisora técnica aún no está contratada. *Cambios*: (1) el despliegue se hace con `ops/deploy.sh` desde el equipo de Sara (la llave SSH no vive en GitHub) y exige `main`, CI verde, checksum, staging previo y un PR aprobado por alguien de `ops/payment-reviewers.txt` distinto de la autora; (2) régimen transitorio de la revisora descrito en el principio IX. Artefactos actualizados: research R-15 y R-16, plan.md, tasks.md, quickstart.md, `ops/`.
 
-**Version**: 1.1.1 | **Ratified**: 2026-11-13 (Sara Andrade) | **Last Amended**: 2026-11-13
+**Version**: 1.2.0 (propuesta; 1.1.0 vigente hasta su aprobación) | **Ratified**: 2026-11-13 (Sara Andrade) | **Last Amended**: 2026-11-13

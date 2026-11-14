@@ -1,4 +1,4 @@
-# Revisión del camino de pago (constitución IX, enmienda 1.1.0; research R-15).
+# Revisión del camino de pago (constitución IX, constitución 1.2.0 propuesta; research R-15).
 #
 # RÉGIMEN TRANSITORIO: @saraandradec es la única dueña mientras se contrata a la revisora técnica humana.
 # Con el plan Free de GitHub este archivo NO bloquea merges (sin protección de rama en repos privados):
@@ -10,6 +10,7 @@
 # GitHub exige que tenga permiso Write en el repo para figurar aquí (ops/runbooks/access.md).
 # La última coincidencia gana: las reglas generales van arriba y las específicas abajo.
 
+# Con GitHub Pro/Team no se activa «Require review from Code Owners» mientras la dueña sea la única persona: no podría aprobar sus propios PR.
 *                                                                   @saraandradec
 
 # [PAGO] Camino de pago (R-15)

@@ -17,7 +17,7 @@ Estado: ☐ pendiente · ☑ verificado (fecha, quién).
 | H5 | Staging | Creado **limpio** (sin clonar producción) o anonimizado con `wp aralia anonymize` antes de habilitar el acceso (R-17) | ☐ |
 | H6 | Secretos | `aralia-secrets.php` **fuera de `public_html`**, permisos `600`; `wp-config.php` define `ARALIA_SECRETS_PATH`, que lee el mu-plugin `aralia-secrets-loader` (R-16); `ops/deploy.sh` nunca lo toca | ☐ |
 | H7 | HTTPS | Certificado activo; redirección 301 a HTTPS; HSTS 1 año (lo envía `aralia-core`) | ☐ |
-| H8 | `wp-config.php` | `DISALLOW_FILE_EDIT`, `DISALLOW_FILE_MODS` (producción), `WP_DEBUG = false`, prefijo de tablas propio (no `wp_`), sales únicas | ☐ |
+| H8 | `wp-config.php` | `DISALLOW_FILE_EDIT` (producción), `WP_DEBUG = false`, prefijo de tablas propio (no `wp_`), sales únicas. **Sin** `DISALLOW_FILE_MODS`: WordPress y los plugins se actualizan desde wp-admin (research R-15) | ☐ |
 | H9 | Base de datos | Usuario y contraseña propios (≥ 12 caracteres), no los del instalador | ☐ |
 | H10 | 2FA del panel de Hostinger | Activo (ver `ops/compliance/accounts-2fa.md`) | ☐ |
 
@@ -25,7 +25,8 @@ Estado: ☐ pendiente · ☑ verificado (fecha, quién).
 
 | # | Requisito | Valor | Estado |
 |---|-----------|-------|--------|
-| W1 | Versiones | Las de `composer.json` (WP 7.1.4, WooCommerce 11.2.1, Wompi 3.2.1, Wordfence 9.0.2, LiteSpeed 7.9.2) | ☐ |
+| W1 | Versiones | WordPress, WooCommerce, Wompi, Wordfence y LiteSpeed los instala y actualiza Hostinger; la versión probada (WP 7.1.4, WooCommerce 11.2.1, Wompi 3.2.1, Wordfence 9.0.2, LiteSpeed 7.9.2 al 2026-11-13) se registra en `ops/inventory.md` | ☐ |
+| W1b | Actualizaciones | Actualización automática **desactivada** en el plugin de Wompi; automáticas menores de WordPress activas; copia previa (UpdraftPlus) y prueba en staging antes de actualizar WooCommerce/Wordfence/LiteSpeed (T168) | ☐ |
 | W2 | Usuarios | Sin usuario `admin`; una sola administradora permanente (Sara); cuentas temporales según `ops/runbooks/access.md` | ☐ |
 | W3 | Registro | Clientas solo con rol `customer` | ☐ |
 | W4 | XML-RPC, `/wp/v2/users`, archivos de autor | Deshabilitados (`aralia-hardening.php`) | ☐ |

@@ -1,4 +1,4 @@
-# Revisoras técnicas humanas del camino de pago (constitución IX, enmienda 1.1.0; research R-15).
+# Revisoras técnicas humanas del camino de pago (constitución IX, constitución 1.2.0 propuesta; research R-15).
 # Un usuario de GitHub por línea. ops/deploy.sh exige, para producción, que TODO commit desde el último despliegue
 # (salvo documentación exenta) venga de un PR fusionado en main y aprobado, sobre su último commit, por alguien de
 # la lista que había en el ÚLTIMO DESPLIEGUE (no la de este commit) distinto de la autora.
