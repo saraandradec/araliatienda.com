@@ -167,6 +167,7 @@ conf "${good[@]}" 'EVIL="1"';                             expect_fail parse_conf
 conf "${good[@]}" 'PRODUCTION_PATH="/a b; rm -rf /"';     expect_fail parse_conf "$T/c.conf"
 conf "${good[@]}" 'PRODUCTION_PATH="/srv/x/../prod"';     expect_fail parse_conf "$T/c.conf"
 conf "${good[@]}" 'PRODUCTION_PATH="/srv//prod"';         expect_fail parse_conf "$T/c.conf"
+conf "${good[@]}" 'PRODUCTION_PATH="/srv/prod/"';          expect_fail parse_conf "$T/c.conf"
 conf "${good[@]}" 'PRODUCTION_SSH="-oProxyCommand=x"';    expect_fail parse_conf "$T/c.conf"
 conf "${good[@]}" 'REPO_DIR="relativa"';                  expect_fail parse_conf "$T/c.conf"
 conf "${good[@]}" 'REPO_DIR="/tmp/$(id)"';                expect_fail parse_conf "$T/c.conf"
@@ -479,6 +480,8 @@ AH="$T/ahome"; rm -rf "$AH"; mkdir -p "$AH"; AP="$T/apkg"; rm -rf "$AP"; mkdir -
 echo t > "$AP/aralia-$ASHA.tar.gz"; echo s > "$AP/aralia-$ASHA.tar.gz.sha256"
 apply() { # $1 kind; $2 confirmación escrita; $3 stub de sync (ok|failreal|failsim); $4 stub de verify (ok|fail); $5 allow; $6 tp de staging (abc|none|otro)
 	rm -rf "$AH"; mkdir -p "$AH"; : > "$T/launcher.called"; rm -f "$T/ct.n" "$T/ct.args"
+	rm -rf "$AP/x/wp-content"; mkdir -p "$AP/x/wp-content/plugins/aralia-core"
+	[ "${NO_BASELINE:-}" = 1 ] || echo "<?php // WP_CLI::add_command( 'aralia baseline', X );" > "$AP/x/wp-content/plugins/aralia-core/cli.php"
 	[ -z "${APPLY_SEED:-}" ] || printf '%s\n' "$APPLY_SEED" > "$AH/production.log"
 	case "${6:-abc}" in none) echo "2026-01-01T00:00:00Z $ASHA s verified launcher=x allow=" > "$AH/staging.log" ;; *) echo "2026-01-01T00:00:00Z $ASHA s verified launcher=x allow= tp=${6:-abc}" > "$AH/staging.log" ;; esac
 	( LOCAL_LOG_DIR="$AH"; SELF="$T/self.sh"; echo '#!/bin/sh' > "$SELF"
@@ -488,7 +491,7 @@ apply() { # $1 kind; $2 confirmación escrita; $3 stub de sync (ok|failreal|fail
 	  install_launcher() { echo called > "$T/launcher.called"; }
 	  check_third_party() { local n; n="$(cat "$T/ct.n" 2>/dev/null || echo 0)"; echo $((n+1)) > "$T/ct.n"; echo "$1" >> "$T/ct.args"
 	    if [ "${CT_CHANGE:-}" = 1 ] && [ "$n" -ge 1 ]; then TP_HASH=zzz; else TP_HASH=abc; fi; }
-	  on_target() { if [ "${NO_BASELINE:-}" = 1 ]; then case "$2" in *has-command*) return 1 ;; esac; fi; return 0; }
+	  on_target() { return 0; }
 	  apply_release production "$ASHA" "$AP" h /p "$1" "OK-CONFIRM" <<<"$2" ) >/dev/null 2>&1 || true
 }
 logn() { local c; c="$(grep -c "$1" "$AH/production.log" 2>/dev/null || true)"; echo "${c:-0}"; }
@@ -612,7 +615,7 @@ gh() {
 		*"/commits/"*"/pulls"*) case "$*" in *"$GH_NOPR_FOR"*) ;; *) [ -n "$GH_PRS" ] && echo "$GH_PRS" || true ;; esac ;;
 		*"/reviews"*)           printf '%s' "$GH_REVIEWS" | awk '{ $1=tolower($1); print }' ;;  # imita ascii_downcase del --jq
 		*"/pulls/"*"/commits"*) printf '%s\n' "$GH_COMMIT_LOGINS" ;;
-		*"/pulls/"*)            echo "$GH_HEAD" ;;
+		*"/pulls/"*)            echo "$GH_HEAD ${GH_NCOMMITS:-1}" ;;
 		*"/commits/"*)          echo "$GH_SIGNED" ;;   # committer web-flow y firma verificada
 	esac
 }
@@ -628,6 +631,9 @@ GH_PRS=""; GH_REVIEWS=$'carol APPROVED headsha\n'
 gate_deny "push directo (sin PR fusionado en main): bloquea" "$CB" "ALTA-REVISORA"
 GH_PRS="12 sara"
 gate_pass "primer despliegue: ALTA-REVISORA y aprobación vigente" "$CB" "ALTA-REVISORA"
+GH_NCOMMITS=250; GH_REVIEWS=$'carol APPROVED headsha\n'
+gate_deny "PR con 250 commits o más (la API no los lista todos): bloquea" "$CB" "ALTA-REVISORA"
+GH_NCOMMITS=1
 gate_deny "primer despliegue sin confirmación escrita: bloquea" "$CB" "no"
 GH_REVIEWS=$'sara APPROVED headsha\n'
 gate_deny "la autora no puede aprobar su propio PR" "$CB" "ALTA-REVISORA"
@@ -694,5 +700,14 @@ set_last "0123456789abcdef0123456789abcdef01234567"; GH_PRS="12 sara"; GH_REVIEW
 gate_deny "último despliegue desconocido en este clon: bloquea" "$CC"
 set_last "$CC"
 gate_deny "el SHA a desplegar no desciende del último despliegue: bloquea" "$CA"
+
+echo "verify_target (vuelta 10)"
+( on_target() { case "$2" in *"wp core is-installed"*"has-command"*) return 1 ;; esac; return 0; }
+  ! verify_target staging h /p ) >/dev/null 2>&1 && pass "staging con WordPress/WP-CLI roto: la verificación falla" || fail "staging con WordPress/WP-CLI roto: la verificación falla"
+( on_target() { return 0; }; verify_target staging h /p ) >/dev/null 2>&1 && pass "staging sano: la verificación pasa" || fail "staging sano: la verificación pasa"
+echo "remove_orphans (vuelta 10)"
+mkdir -p "$T/orph/wp-content/mu-plugins"
+( list_dir() { echo; }; on_target() { return 255; }; remove_orphans "$T/orph" h /p ) >/dev/null 2>&1 && fail "remove_orphans: un fallo de ssh (255) no se toma por 'no existe'" || pass "remove_orphans: un fallo de ssh (255) no se toma por 'no existe'"
+( list_dir() { echo; }; on_target() { return 1; }; remove_orphans "$T/orph" h /p ) >/dev/null 2>&1 && pass "remove_orphans: 'no existe' (1) sigue adelante" || fail "remove_orphans: 'no existe' (1) sigue adelante"
 
 if [ "$fails" -eq 0 ]; then echo "deploy_test: todo OK"; else echo "deploy_test: $fails fallo(s)"; exit 1; fi

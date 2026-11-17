@@ -46,9 +46,7 @@ PROJECT_REL="E-commerce"
 REPO_ROOT="$(cd "$PROJECT_DIR/.." && pwd -P)"
 # Compatible con el bash 3.2 de macOS (sin mapfile ni arrays asociativos).
 
-# Plugins de terceros que se instalan y actualizan en Hostinger (lista cerrada, R-15). Este script NO los despliega ni
-# los toca: comprueba su lista y versiones en el servidor antes y después de desplegar (check_third_party). UpdraftPlus Premium se instala a mano.
-THIRD_PARTY_PLUGINS=(woocommerce wompi-portal-de-pagos wordfence litespeed-cache)
+# Los terceros (lista cerrada, R-15) se leen de ops/third-party.lock; este script no los despliega ni los toca (check_third_party).
 
 # Revisión obligatoria para TODO el repo salvo documentación que no se despliega ni controla el despliegue.
 # (Criterio invertido tras la revisión T0 del 2026-11-13: una lista de "rutas de pago" se desalineaba de CODEOWNERS
@@ -186,7 +184,7 @@ sync_release() {
 # Código propio que ya no viaja en el paquete (mu-plugin renombrado o retirado, rollback a un SHA anterior al componente)
 # se borra del destino: un mu-plugin viejo seguiría ejecutándose. Solo nombres aralia-* validados; con -n solo se lista.
 remove_orphans() {
-	local src="$1" host="$2" path="$3" dry="${4:-}" listing name rel
+	local src="$1" host="$2" path="$3" dry="${4:-}" listing name rel rc
 	listing="$(list_dir "$host" "$path/wp-content/mu-plugins" optional)" || die "No se pudo listar mu-plugins del servidor"
 	while IFS= read -r name; do
 		[ -n "$name" ] || continue
@@ -197,7 +195,8 @@ remove_orphans() {
 	done <<<"$listing"
 	for rel in wp-content/plugins/aralia-core wp-content/themes/aralia; do
 		[ -e "$src/$rel" ] && continue
-		on_target "$host" "test -e '$path/$rel'" 2>/dev/null || continue
+		rc=0; on_target "$host" "test -e '$path/$rel'" 2>/dev/null || rc=$?
+		case "$rc" in 0) ;; 1) continue ;; *) die "No se pudo comprobar $rel en el servidor (código $rc): no se continúa" ;; esac
 		orphan_delete "$host" "$path" "$rel" "$dry" || return 1
 	done
 	return 0
@@ -229,7 +228,7 @@ parse_conf() {
 			STAGING_SSH|PRODUCTION_SSH)   [[ "$val" =~ ^[A-Za-z0-9._@][A-Za-z0-9._@-]*$ ]] || die "deploy.conf: $key inválido" ;;
 			STAGING_PATH|PRODUCTION_PATH)
 				[[ "$val" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "deploy.conf: $key inválido (solo letras, números . _ - /)"
-				case "$val" in *..*|*//*|*/./*|*/.) die "deploy.conf: $key no puede contener .., // ni /./" ;; esac ;;
+				case "$val" in *..*|*//*|*/./*|*/.|*/) die "deploy.conf: $key no puede contener .., //, /./ ni terminar en /" ;; esac ;;
 			REPO_DIR)
 				case "$val" in /*) ;; *) die "deploy.conf: REPO_DIR debe ser una ruta absoluta" ;; esac
 				case "$val" in *[\"\'\`\$\\]*|*..*) die "deploy.conf: REPO_DIR con caracteres no permitidos" ;; esac ;;
@@ -261,7 +260,6 @@ load_conf() {
 # Identidad real del destino SSH (usuario y host tras resolver ~/.ssh/config), para detectar alias que apuntan a la misma cuenta.
 ssh_identity() { ssh -G "$1" 2>/dev/null | awk '$1=="user"||$1=="hostname"{printf "%s ", $2}'; }
 
-# Condiciones de la primera salida a producción (decisiones de Sara; ver ops/compliance/accounts-2fa.md).
 # Staging y producción no pueden compartir cuenta ni solaparse (el código de staging se despliega sin la revisión de producción).
 check_destinations() {
 	if [ "$STAGING_SSH" = "$PRODUCTION_SSH" ] || [ "$(ssh_identity "$STAGING_SSH")" = "$(ssh_identity "$PRODUCTION_SSH")" ]; then
@@ -514,7 +512,11 @@ check_payment_reviews() {
 		ok=false
 		while read -r n author; do
 			[ -n "$n" ] || continue
-			head="$(gh api "repos/$REPO/pulls/$n" --jq .head.sha)" || die "No se pudo consultar el PR #$n"
+			prinfo="$(gh api "repos/$REPO/pulls/$n" --jq '"\(.head.sha) \(.commits)"')" || die "No se pudo consultar el PR #$n"
+			read -r head ncommits <<<"$prinfo"
+			[[ "$ncommits" =~ ^[0-9]+$ ]] || die "PR #$n: número de commits ilegible"
+			# La API de commits de un PR devuelve como máximo 250: más commits dejarían autores sin ver.
+			[ "$ncommits" -lt 250 ] || die "El PR #$n tiene 250 commits o más: la lista de autores no es completa; divídelo"
 			# Quien aprueba no puede haber escrito commits del PR (ni abrirlo).
 			prauthors="$(gh api "repos/$REPO/pulls/$n/commits" --paginate --jq '.[] | ((.author.login // "NULL") , (.committer.login // "NULL"))' | tr 'A-Z' 'a-z')" \
 				|| die "No se pudo consultar los commits del PR #$n"
@@ -612,8 +614,8 @@ inventory_fs() {
 }
 
 check_third_party() {
-	local sha="$1" host="$2" path="$3" manifest out core_v list norm name status ver au k v ok req seen=" " core_norm="" vnorm
-	manifest="$(git -C "$REPO_ROOT" show "$sha:$PROJECT_REL/ops/third-party.lock" 2>/dev/null | sed 's/#.*//' | awk 'NF')" || true
+	local sha="$1" host="$2" path="$3" manifest cksum_plugins out core_v list norm name status ver au k v ok req seen=" " core_norm="" vnorm
+	manifest="$(git -C "$REPO_ROOT" show "$sha:$PROJECT_REL/ops/third-party.lock" 2>/dev/null | sed 's/#.*//; s/[[:space:]]*$//' | awk 'NF')" || true
 	[ -n "$manifest" ] || die "Falta ops/third-party.lock en $sha (lista cerrada de terceros y versiones)"
 	inventory_fs "$host" "$path" "$manifest"
 	out="$(on_target "$host" "cd '$path' && wp core verify-checksums --skip-plugins --skip-themes 2>&1")" || die "wp core verify-checksums falló: $out"
@@ -628,8 +630,14 @@ check_third_party() {
 		case "$core_v" in $v) ok=yes; core_norm="core $v" ;; esac
 	done <<<"$manifest"
 	[ "$ok" = yes ] || die "WordPress $core_v no coincide con ops/third-party.lock de $sha"
-	out="$(on_target "$host" "cd '$path' && wp plugin verify-checksums ${THIRD_PARTY_PLUGINS[*]} --skip-plugins --skip-themes 2>&1")" || die "wp plugin verify-checksums falló: $out"
-	if grep -qi 'warning' <<<"$out"; then die "wp plugin verify-checksums con avisos: $out"; fi
+	# Checksums solo de los plugins con versión exacta en el lock (los "any" no se pueden verificar): añadir o quitar un tercero
+	# es una línea en el lock, no un cambio de este script.
+	cksum_plugins="$(awk '$1=="plugin" && $3!="any" {print $2}' <<<"$manifest" | tr '\n' ' ')"
+	if [ -n "$cksum_plugins" ]; then
+		[[ "$cksum_plugins" =~ ^[A-Za-z0-9._\ -]+$ ]] || die "ops/third-party.lock: nombre de plugin no válido"
+		out="$(on_target "$host" "cd '$path' && wp plugin verify-checksums $cksum_plugins --skip-plugins --skip-themes 2>&1")" || die "wp plugin verify-checksums falló: $out"
+		if grep -qi 'warning' <<<"$out"; then die "wp plugin verify-checksums con avisos: $out"; fi
+	fi
 	list="$(on_target "$host" "cd '$path' && wp plugin list --fields=name,status,version,auto_update --format=csv --skip-plugins --skip-themes")" || die "No se pudo listar los plugins"
 	norm="${core_norm}"$'\n'
 	while IFS=, read -r name status ver au; do
@@ -688,7 +696,8 @@ verify_target() {
 	if [ "$target" = production ]; then
 		baseline="wp aralia baseline check"
 	else
-		baseline="if wp cli has-command 'aralia baseline'; then wp aralia baseline check; else echo 'aviso: baseline check aún no existe (fase 2)'; fi"
+		# wp core is-installed falla si WordPress o WP-CLI están rotos: eso NO es "el comando aún no existe".
+		baseline="wp core is-installed && if wp cli has-command 'aralia baseline'; then wp aralia baseline check; else echo 'aviso: baseline check aún no existe (fase 2)'; fi"
 	fi
 	on_target "$host" "cd '$path' && $baseline"
 }
@@ -698,7 +707,7 @@ cleanup() { [ -n "$DEPLOY_TMP" ] && rm -rf "$DEPLOY_TMP"; return 0; }
 
 # Simulación, confirmación, copia, verificación y registro (compartido por deploy y rollback).
 apply_release() {
-	local target="$1" sha="$2" tmp="$3" host="$4" path="$5" kind="$6" confirm="$7" answer nchanges ndel flags="" lock_sha tp_before
+	local target="$1" sha="$2" tmp="$3" host="$4" path="$5" kind="$6" confirm="$7" answer nchanges ndel flags="" lock_sha tp_before who
 	# Un rollback comprueba los terceros contra el lock del último despliegue verificado (lo que debe estar instalado AHORA),
 	# no contra el del SHA de destino: si después se actualizó un tercero, el lock antiguo ya no describe el servidor.
 	lock_sha="$sha"
@@ -708,8 +717,9 @@ apply_release() {
 	if [ "$target" = production ] && [ "$kind" = verified ]; then staging_tp_matches "$sha"; fi
 	# En un rollback no se exige: el sitio puede estar roto justo por el código que se quiere retirar.
 	if [ "$target" = production ] && [ "$kind" = verified ]; then
-		on_target "$host" "cd '$path' && wp cli has-command 'aralia baseline'" >/dev/null 2>&1 \
-			|| die "En producción falta 'wp aralia baseline check' (Fase 2, T032): no se despliega hasta que exista, para no copiar y fallar la verificación"
+		# Se comprueba el PAQUETE (lo que va a quedar instalado), no el servidor: en el primer despliegue el servidor aún no tiene aralia-core.
+		grep -rqs --include='*.php' "aralia baseline" "$tmp/x/wp-content/plugins/aralia-core" \
+			|| die "El paquete no trae 'wp aralia baseline check' (Fase 2, T032): no se despliega hasta que exista, para no copiar y fallar la verificación"
 	fi
 	info "Simulación en $target ($host:$path):"
 	sync_release "$tmp/x" "$host" "$path" -n > "$tmp/dry-run.txt" || die "La simulación falló (ruta, ssh o rsync); no se despliega nada"
@@ -735,7 +745,8 @@ apply_release() {
 	# Las aceptaciones de riesgo vigentes quedan escritas junto al despliegue.
 	[ "$ALLOW_SHARED_STAGING" = yes ] && flags="$flags ALLOW_SHARED_STAGING"
 	[ "$ALLOW_UNPROTECTED_MAIN" = yes ] && flags="$flags ALLOW_UNPROTECTED_MAIN"
-	printf '%s %s %s %s launcher=%s allow=%s tp=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$sha" "$(git config user.email || whoami)" "$kind" \
+	who="$(git config user.email || whoami)"; who="${who//[[:space:]]/_}"; [ -n "$who" ] || who=unknown   # el registro se lee por posición de campo
+	printf '%s %s %s %s launcher=%s allow=%s tp=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$sha" "$who" "$kind" \
 		"$(sha256_of "$SELF")" "${flags# }" "$TP_HASH" >> "$(deploy_log "$target")"
 	info "Desplegado y verificado en $target ($kind): $sha"
 	if [ "$target" = production ] && [ "$kind" = verified ]; then install_launcher "$sha"; fi

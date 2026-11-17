@@ -1,6 +1,6 @@
 # Línea base de configuración — Aralía Beauty Store
 
-Fuente: research R-03, R-12, R-13, R-15, R-16, R-17, R-21; compliance-mapping 2.2.x / 8.9. La verificación automática es `wp aralia baseline check` (se implementa en la fase 2, T032) y corre después de cada despliegue; en producción `ops/deploy.sh` se niega a desplegar mientras no exista.
+Fuente: research R-03, R-12, R-13, R-15, R-16, R-17, R-21; compliance-mapping 2.2.x / 8.9. La verificación automática es `wp aralia baseline check` (se implementa en la fase 2, T032) y corre después de cada despliegue; en producción `ops/deploy.sh` se niega a desplegar mientras el paquete no lo traiga (se comprueba el paquete, no el servidor).
 
 Estado: ☐ pendiente · ☑ verificado (fecha, quién).
 

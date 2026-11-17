@@ -58,7 +58,7 @@ La constitución del repo fue **ratificada v1.0.0 el 2026-11-13** y **enmendada 
 
 ```text
 specs/001-aralia-store-p0/
-├── spec.md · threat-model.md (v1.2) · data-classification.md · compliance-mapping.md (con §7)
+├── spec.md · threat-model.md (v1.3) · data-classification.md · compliance-mapping.md (con §7)
 ├── plan.md                  # Este archivo (iteración 4)
 ├── research.md              # Fase 0 (R-01…R-24, v3)
 ├── data-model.md            # Fase 1 (v3)
@@ -165,6 +165,7 @@ E-commerce/
 | Gates T0 de la Fase 1, vuelta 5 (architect, security, code-reviewer) | Lista cerrada de terceros `ops/third-party.lock` comprobada antes de copiar y con huella `tp=` igual a la de staging; la puerta exige el commit de fusión firmado por GitHub; código propio retirado se borra del servidor; ssh sin reenvío de agente; paquete y `build/` endurecidos | `ops/deploy.sh`, `ops/third-party.lock`, threat-model v1.3 (RR-11 a RR-14), T169 a T171 |
 | Gates T0 de la Fase 1, vuelta 6 (architect, security, code-reviewer) | Destino sin enlaces simbólicos antes de `--delete`; el paquete debe traer todo el código propio de git; inventario de terceros por archivos (plugins, temas, mu-plugins, drop-ins) y activos obligatorios; núcleo `7.1.*`; rollback contra el lock del último despliegue verificado; comprobación repetida tras copiar; producción exige `baseline check`; `build/` sin mayúsculas ni `.php5`; guard con cargador `aralia-wompi-guard.php` (N5) | `ops/deploy.sh` (239 pruebas), `ops/third-party.lock`, constitución 1.2.0 (puntos 7 y 8), T170 |
 | Gates T0 de la Fase 1, vuelta 7 (architect, security, code-reviewer) | Listado del servidor a prueba de nombres con saltos de línea y caracteres raros (`list_dir`), comparación literal de plugins, ejecutables sueltos en `wp-content` solo como drop-in exacto, huella normalizada (`7.1.*`, `any`), rollback sin exigir `baseline`, runbook alineado con RR-13 | `ops/deploy.sh` (262 pruebas), runbook, threat-model RR-9/RR-12/RR-13 |
+| Gates T0 de la Fase 1, vuelta 9 → 10 (architect NO APROBADO por A-1; code-reviewer aprobado; security apto con observaciones) | La puerta de producción comprueba que el **paquete** traiga `wp aralia baseline` (no el servidor: el primer despliegue no podía salir); `verify_target` de staging exige `wp core is-installed`; checksums de plugins derivados de `third-party.lock`; rutas de `deploy.conf` sin barra final; `remove_orphans` distingue ssh caído (255) de «no existe»; límite de 250 commits por PR; registro local sin espacios en el usuario; filtro del secreto de CI ampliado (Brevo, Meta, Turnstile real, cuenta de servicio) | `ops/deploy.sh`, pruebas, runbook, `ecommerce-ci.yml` |
 | Gates T0 de la Fase 1, vuelta 8 (architect, security, code-reviewer) | `printf` en el listado (nombres `-n`/`-e`), `index.php` solo si es el de WordPress y archivo regular, archivos ocultos en `wp-content` rechazados, estado de plugins y tema activo en la huella, `LC_ALL=C`, borrado de huérfanos con comprobación de enlaces, rollback solo a SHA `verified`, seguro de T170 en un mu-plugin | `ops/deploy.sh` (279 pruebas), T170, runbook |
 
 ### Iteración 2 — respuesta a la revisión de arquitectura (iteración 1)

@@ -134,8 +134,11 @@ jobs:
           [ -n "$ARALIA_CI_SECRETS" ] || { echo "::error::ARALIA_CI_SECRETS_SANDBOX está vacío"; exit 1; }
           mkdir -p .wp-env-private
           printf '%s' "$ARALIA_CI_SECRETS" > .wp-env-private/aralia-secrets.php
-          if grep -Eq "(prv|pub)_prod_|prod_(events|integrity)_" .wp-env-private/aralia-secrets.php; then
-            echo "::error::El secreto de CI contiene llaves de producción"; exit 1
+          # Wompi de producción, y credenciales que no se distinguen por prefijo entre prueba y producción:
+          # Brevo (xkeysib-), Meta CAPI (token EAA...), Turnstile real (0x4AAAAAAA...; las de prueba son 1x/2x/3x0000...)
+          # y cuenta de servicio de Google (service_account / private_key).
+          if grep -Eq "(prv|pub)_prod_|prod_(events|integrity)_|xkeysib-|EAA[A-Za-z0-9]{100,}|0x4AAAAAAA|service_account|BEGIN (RSA |EC )?PRIVATE KEY" .wp-env-private/aralia-secrets.php; then
+            echo "::error::El secreto de CI contiene credenciales que no son de prueba"; exit 1
           fi
 
       - if: steps.run.outputs.wp == 'true'
