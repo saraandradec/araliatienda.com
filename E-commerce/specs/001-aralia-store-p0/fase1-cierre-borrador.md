@@ -1,4 +1,4 @@
-# Cierre de la Fase 1 (T169) — BORRADOR para revisión y firma de Sara
+# Cierre de la Fase 1 (T169) — APROBADO por Sara el 2026-11-17
 
 > Este documento es un borrador preparado por Claude. **No es una aprobación.** Nada de lo que sigue está registrado en `.trace/ledger.jsonl` ni la constitución ha cambiado de estado hasta que Sara lo apruebe expresamente.
 

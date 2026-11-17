@@ -157,7 +157,7 @@ Escala: Probabilidad (B/M/A) × Impacto (B/M/A). **Control** = requisito del spe
 
 ---
 
-**Aceptación de riesgos residuales**: **RR-8 a RR-15 (2026-11-13) están PROPUESTOS: su aceptación por Sara Andrade queda pendiente de registrar en el ledger.** RR-1 a RR-7 aceptados explícitamente por **Sara Andrade** (responsable de Aralía) el **2026-11-03**, durante la planificación (logiplan, iteración 3 del plan). También se decidió exigir revisión humana en cada cambio posterior del camino de pago, por lo que no hay riesgo residual por revisión, salvo los RR-8 a RR-15 de la Fase 1. Revisión de los riesgos: anual o al cumplirse su disparador.
+**Aceptación de riesgos residuales**: **RR-8 a RR-15 fueron aceptados explícitamente por Sara Andrade el 2026-11-17 y quedan registrados en el ledger (T169).** RR-1 a RR-7 aceptados explícitamente por **Sara Andrade** (responsable de Aralía) el **2026-11-03**, durante la planificación (logiplan, iteración 3 del plan). También se decidió exigir revisión humana en cada cambio posterior del camino de pago, por lo que no hay riesgo residual por revisión, salvo los RR-8 a RR-15 de la Fase 1. Revisión de los riesgos: anual o al cumplirse su disparador.
 
 ## 4. Requisitos de seguridad derivados para el plan
 

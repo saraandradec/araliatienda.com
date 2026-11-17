@@ -1,4 +1,4 @@
-# Runbook — Despliegue (research R-15, constitución 1.2.0 propuesta)
+# Runbook — Despliegue (research R-15, constitución 1.2.0)
 
 **Quién**: solo Sara, desde su equipo. **Por qué local**: GitHub Free no protege environments ni ramas en repos privados; la llave SSH no se guarda en GitHub.
 
@@ -61,7 +61,7 @@ Este runbook despliega **solo el código propio**: el plugin `aralia-core`, el t
 2. `~/.aralia-deploy/bin/deploy.sh rollback <sha del último bueno>`. Los terceros se comprueban contra el `third-party.lock` del **último despliegue verificado** (lo que debe estar instalado ahora), no contra el del SHA al que vuelves; un tercero solo puede volver a la versión del lock del último despliegue verificado: restaurar **otra** versión (p. ej. con UpdraftPlus) bloquea el rollback (hueco aceptado en RR-11; para ese caso, restaura primero el sitio con UpdraftPlus y despliega con el flujo normal). Solo admite SHA con despliegue verificado en `~/.aralia-deploy/production.log`; usa el paquete guardado en `~/.aralia-deploy/releases/` (los artefactos del CI caducan a los 90 días), vuelve a comprobar su SHA-256 y que sea idéntico a git, y queda registrado como `rollback`. **No mueve el ancla de confianza**: el siguiente despliegue debe descender del último `verified`.
 3. Anotar el incidente y sus causas en el ledger TRACE.
 
-## Riesgos residuales (threat-model RR-8 a RR-15; aceptación de Sara pendiente)
+## Riesgos residuales (threat-model RR-8 a RR-15; aceptados por Sara el 2026-11-17)
 
 - **RR-8 · Registro y lanzador locales**: quien controle tu usuario del equipo puede falsear `~/.aralia-deploy/*.log` o sustituir el lanzador. Mitigación parcial: permisos 700, el lanzador y su carpeta se rechazan si no son tuyos, son enlaces simbólicos o permiten escribir a otros, y cada despliegue anota `launcher=<sha256>` y los `ALLOW_*` vigentes. La protección de rama (T166) reduce el riesgo.
 - **RR-9 · Fusión con cambios extra**: la puerta exige que el commit sea el de fusión del PR y esté firmado por GitHub, lo que descarta un merge local con cambios añadidos. Queda que quien controle tu cuenta de GitHub puede aprobar/fusionar desde la web; la protección de rama (T166) lo reduce.
