@@ -614,9 +614,11 @@ inventory_fs() {
 }
 
 check_third_party() {
-	local sha="$1" host="$2" path="$3" manifest cksum_candidates cksum_plugins installed out core_v list norm name status ver au k v ok req seen=" " core_norm="" vnorm
+	local sha="$1" host="$2" path="$3" manifest dups cksum_candidates cksum_plugins installed out core_v list norm name status ver au k v ok req seen=" " core_norm="" vnorm
 	manifest="$(git -C "$REPO_ROOT" show "$sha:$PROJECT_REL/ops/third-party.lock" 2>/dev/null | sed 's/#.*//; s/[[:space:]]*$//' | awk 'NF')" || true
 	[ -n "$manifest" ] || die "Falta ops/third-party.lock en $sha (lista cerrada de terceros y versiones)"
+	dups="$(awk '$1=="plugin" {print $2}' <<<"$manifest" | sort | uniq -d)"
+	[ -z "$dups" ] || die "ops/third-party.lock: plugin repetido (una sola línea por plugin): $dups"
 	inventory_fs "$host" "$path" "$manifest"
 	out="$(on_target "$host" "cd '$path' && wp core verify-checksums --skip-plugins --skip-themes 2>&1")" || die "wp core verify-checksums falló: $out"
 	if grep -qi 'warning' <<<"$out"; then die "wp core verify-checksums con avisos: $out"; fi

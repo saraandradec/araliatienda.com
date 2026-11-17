@@ -426,7 +426,9 @@ mklock() { printf "$1" > "$V/E-commerce/ops/third-party.lock"; git -C "$V" add -
 L_ANY="$(mklock 'core 7.1.*\nplugin woocommerce 11.2.1\nplugin wompi-portal-de-pagos any\nplugin wordfence 9.0.2\nplugin updraftplus any\ntheme twentytwentysix\nmu hostinger-tools\ndropin advanced-cache\n')"
 L_LS="$(mklock 'core 7.1.*\nplugin woocommerce 11.2.1\nplugin wompi-portal-de-pagos 3.2.1\nplugin wordfence 9.0.2\nplugin litespeed-cache 7.9.2\nplugin updraftplus any\ntheme twentytwentysix\nmu hostinger-tools\ndropin advanced-cache\n')"
 L_BAD="$(mklock 'core 7.1.*\nplugin woocommerce 11.2.1\nplugin wompi-portal-de-pagos 3.2.1\nplugin wordfence 9.0.2\nplugin --all 1.0\ntheme twentytwentysix\nmu hostinger-tools\ndropin advanced-cache\n')"
+L_DUP="$(mklock 'core 7.1.*\nplugin woocommerce 11.2.1\nplugin woocommerce any\nplugin wompi-portal-de-pagos 3.2.1\nplugin wordfence 9.0.2\ntheme twentytwentysix\nmu hostinger-tools\ndropin advanced-cache\n')"
 git -C "$V" reset -q --hard "$VS"
+if ct "$L_DUP"; then fail "plugin repetido en el lock debía bloquear"; else pass "plugin repetido en el lock: bloquea"; fi
 if ct "$L_ANY"; then fail "Wompi con 'any' en el lock debía bloquear"; else pass "un plugin obligatorio con 'any' en el lock: bloquea"; fi
 rm -f "$T/ck.args"
 if ct "$L_LS"; then pass "plugin con versión exacta en el lock pero no instalado (litespeed): no bloquea"; else fail "litespeed no instalado no debe bloquear: $(tail -1 "$T/ct.out")"; fi
@@ -723,7 +725,10 @@ printf '%s\n' "<?php" "// WP_CLI::add_command( 'aralia baseline', X );" "/* WP_C
 package_has_baseline "$BP" && fail "un comentario no debe bastar" || pass "baseline mencionado solo en comentarios: no cuenta"
 printf '%s\n' "<?php" "\\WP_CLI::add_command( \"aralia baseline\", X );" > "$BP/wp-content/mu-plugins/aralia-cli.php"
 package_has_baseline "$BP" && pass "baseline registrado en un mu-plugin aralia-*: cuenta" || fail "baseline en mu-plugin debe contar"
-( on_target() { case "$2" in *"aralia baseline check"*) return 1 ;; esac; return 0; }; verify_target staging h /p yes ) >/dev/null 2>&1 && fail "staging con paquete que trae baseline: debe ejecutarlo y fallar" || pass "staging con paquete que trae baseline: lo ejecuta (si falla, no verifica)"
+( on_target() { printf '%s' "$2" > "$T/vt.cmd"; }; verify_target staging h /p yes ) >/dev/null 2>&1
+grep -q 'aralia baseline check' "$T/vt.cmd" && ! grep -q 'has-command' "$T/vt.cmd" && pass "staging con paquete que trae baseline: lo ejecuta sin la rama permisiva" || fail "staging con baseline en el paquete no debe usar la rama permisiva: $(cat "$T/vt.cmd")"
+( on_target() { printf '%s' "$2" > "$T/vt.cmd"; }; verify_target staging h /p no ) >/dev/null 2>&1
+grep -q 'has-command' "$T/vt.cmd" && pass "staging sin baseline en el paquete (antes de T032): rama permisiva" || fail "staging sin baseline debe usar la rama permisiva"
 echo "verify_target (vuelta 10)"
 ( on_target() { case "$2" in *"wp core is-installed"*"has-command"*) return 1 ;; esac; return 0; }
   ! verify_target staging h /p ) >/dev/null 2>&1 && pass "staging con WordPress/WP-CLI roto: la verificación falla" || fail "staging con WordPress/WP-CLI roto: la verificación falla"

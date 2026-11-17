@@ -2,7 +2,7 @@
 
 **Feature**: [spec.md](./spec.md) · **Tier**: T0 · **Fecha**: 2026-11-03 · **Versión**: 1.3
 **Método**: STRIDE por límite de confianza, sobre el diseño decidido (tienda WooCommerce, pago con el **widget alojado por Wompi** abierto desde la página order-pay de la tienda, eventos procesados por `aralia-wompi-guard`, una administradora).
-**Cambios v1.3 (2026-11-13)**: RR-8 a RR-15 (despliegue local, solo código propio, terceros por Hostinger/wp-admin; ver `ops/runbooks/deploy.md`). **Cambios v1.2**: H13 (anulación desde el panel neutralizada), límite de rechazos por origen, intentos paralelos, RR-6 y RR-7. **Cambios v1.1**: el pago es por widget (no redirección) tras verificar el código del plugin (research R-01); LC-4, T-2 y RR-4 actualizados; nuevas amenazas T-10, T-11, S-7; controles alineados con research v2.
+**Cambios v1.3 (2026-11-13; RR-15 añadido el 2026-11-17)**: RR-8 a RR-15 (despliegue local, solo código propio, terceros por Hostinger/wp-admin; ver `ops/runbooks/deploy.md`). **Cambios v1.2**: H13 (anulación desde el panel neutralizada), límite de rechazos por origen, intentos paralelos, RR-6 y RR-7. **Cambios v1.1**: el pago es por widget (no redirección) tras verificar el código del plugin (research R-01); LC-4, T-2 y RR-4 actualizados; nuevas amenazas T-10, T-11, S-7; controles alineados con research v2.
 
 ---
 
