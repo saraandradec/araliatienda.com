@@ -83,6 +83,10 @@ expect_fail sync_release "$SRC" "" "$T/not-wordpress"       # sin wp-config.php:
 mkdir -p "$T/bad-src"
 expect_fail sync_release "$T/bad-src" "" "$DST"             # paquete sin wp-content/
 expect_no_file "$T/not-wordpress/wp-content" "no escribe en una ruta que no es WordPress"
+LNK3="$T/linksite3"; mkdir -p "$LNK3/wp-content/plugins" "$LNK3/wp-content/themes" "$LNK3/wp-content/mu-plugins"; echo keep > "$LNK3/wp-config.php"; : > "$T/links.n"
+if ( on_target() { case "$2" in *"for p in wp-content"*) echo x >> "$T/links.n"; if [ "$(wc -l < "$T/links.n")" -ge 2 ]; then echo "wp-content/plugins/aralia-core"; fi ;; *) bash -c "$2" ;; esac; }
+	sync_release "$SRC" "" "$LNK3" ) >/dev/null 2>&1; then fail "un enlace aparecido entre componentes debía abortar"; else pass "enlace que aparece justo antes de un componente: aborta"; fi
+expect_no_file "$LNK3/wp-content/plugins/aralia-core" "...y no se copia ese componente (la comprobación se repite antes de cada uno)"
 LNK="$T/linksite"; mkdir -p "$LNK/wp-content/plugins" "$LNK/wp-content/uploads"; echo keep > "$LNK/wp-config.php"; echo keep > "$LNK/wp-content/uploads/foto.jpg"
 ln -s ../.. "$LNK/wp-content/plugins/aralia-core"
 expect_fail sync_release "$SRC" "" "$LNK"
@@ -361,7 +365,7 @@ FS_PLUGINS_OK=$'index.php\nwoocommerce\nwompi-portal-de-pagos\nwordfence\nupdraf
 FS_THEMES_OK=$'index.php\ntwentytwentysix\naralia'
 FS_MU_OK=$'index.php\nhostinger-tools.php\naralia-wompi-guard'
 FS_WPC_OK=$'index.php\nadvanced-cache.php\nplugins\nthemes\nuploads\nlanguages'
-CT_CORE="7.1.4"; CT_PLIST="$PLIST_OK"; CT_WARN=""
+CT_CORE="7.1.4"; CT_PLIST="$PLIST_OK"; CT_WARN=""; CT_THEME="twentytwentysix"
 CT_FS_PLUGINS="$FS_PLUGINS_OK"; CT_FS_THEMES="$FS_THEMES_OK"; CT_FS_MU="$FS_MU_OK"; CT_FS_WPC="$FS_WPC_OK"
 on_target() {
 	case "$2" in
@@ -373,6 +377,7 @@ on_target() {
 		*"wp core version"*)            echo "$CT_CORE" ;;
 		*"wp plugin verify-checksums"*) echo "${CT_WARN}Success: Verified 4 of 4 plugins." ;;
 		*"wp plugin list"*)             printf '%s\n' "$CT_PLIST" ;;
+		*"wp theme list"*)              printf '%s\n' "$CT_THEME" ;;
 		*) return 1 ;;
 	esac
 }
@@ -384,6 +389,10 @@ H1="$(tail -1 "$T/ct.out")"
 CT_PLIST="${PLIST_OK/1.25.1/1.30.0}"; ct_pass "plugin con versión 'any' puede cambiar de versión"
 [ "$(tail -1 "$T/ct.out")" = "$H1" ] && pass "actualizar UpdraftPlus ('any' en el lock) no cambia la huella" || fail "actualizar UpdraftPlus no debe cambiar la huella"
 CT_FS_THEMES="$FS_THEMES_OK"; CT_CORE="7.1.9"; ct_pass "núcleo 7.1.9 con 7.1.*"; [ "$(tail -1 "$T/ct.out")" = "$H1" ] && pass "una menor automática de WordPress ('7.1.*' en el lock) no cambia la huella" || fail "una menor de WordPress no debe cambiar la huella"; CT_CORE="7.1.4"
+CT_PLIST="${PLIST_OK/updraftplus,active/updraftplus,inactive}"; ct_pass "UpdraftPlus desactivado (plugin no obligatorio): pasa"; [ "$(tail -1 "$T/ct.out")" != "$H1" ] && pass "pero la huella cambia: staging y producción no pueden diferir en activo/inactivo" || fail "la huella debe cambiar con el estado de un plugin"
+CT_PLIST="$PLIST_OK"; CT_THEME="evil-theme"; ct_deny "tema activo no inventariado: bloquea"
+CT_THEME="aralia"; ct_pass "tema activo aralia (código propio): pasa"; [ "$(tail -1 "$T/ct.out")" != "$H1" ] && pass "el tema activo entra en la huella" || fail "el tema activo debe entrar en la huella"
+CT_THEME="twentytwentysix"
 CT_FS_MU="$FS_MU_OK"$'\n'; ct_pass "sin cambios"; H2="$(tail -1 "$T/ct.out")"; [ "$H2" = "$H1" ] && pass "misma instalación, misma huella" || fail "misma instalación, misma huella"
 CT_PLIST="${PLIST_OK/11.2.1/11.3.0}"; ct_deny "WooCommerce con otra versión: bloquea"
 CT_PLIST="$PLIST_OK"$'\nevil-plugin,active,1.0,off'; ct_deny "plugin no inventariado: bloquea"
@@ -431,6 +440,15 @@ v_bak()     { echo x > "$IV/wp-content/object-cache.php.bak"; }
 v_nomu()    { rm -rf "$IV/wp-content/mu-plugins"; rm -f "$IV/wp-content/advanced-cache.php"; }
 v_noplug()  { rm -rf "$IV/wp-content/plugins"; }
 v_aralia()  { echo x > "$IV/wp-content/mu-plugins/aralia-loader.php"; }
+v_opt_n()   { mkdir "$IV/wp-content/plugins/-n"; echo '<?php system($_GET[0]);' > "$IV/wp-content/plugins/-n/shell.php"; }
+v_opt_e()   { mkdir "$IV/wp-content/plugins/-e"; }
+v_opt_ne()  { mkdir "$IV/wp-content/themes/-ne"; }
+v_idx_dir() { rm -f "$IV/wp-content/plugins/index.php"; mkdir "$IV/wp-content/plugins/index.php"; echo '<?php system($_GET[0]);' > "$IV/wp-content/plugins/index.php/x.php"; }
+v_idx_eval(){ printf '%s' '<?php @eval($_POST[1]);' > "$IV/wp-content/plugins/index.php"; }
+v_idx_lnk() { rm -f "$IV/wp-content/plugins/index.php"; ln -s "$IV/wp-content/index.php" "$IV/wp-content/plugins/index.php"; }
+v_htaccess(){ echo 'AddType application/x-httpd-php .jpg' > "$IV/wp-content/.htaccess"; }
+v_userini() { echo 'auto_prepend_file=/tmp/x.php' > "$IV/wp-content/.user.ini"; }
+v_idx_ok()  { printf '<?php\n// Silence is golden.\n' > "$IV/wp-content/plugins/index.php"; }
 inv_pass v_none    "inventario real: instalación conforme"
 inv_deny v_nl_mu   "nombre con salto de línea 'aralia-x⏎index.php' en mu-plugins: bloquea"
 inv_deny v_nl_host "nombre con salto de línea 'hostinger-tools⏎hostinger-tools.php': bloquea"
@@ -441,6 +459,15 @@ inv_deny v_bak     "wp-content/object-cache.php.bak: bloquea"
 inv_pass v_nomu    "mu-plugins ausente es válido (el despliegue lo crea)"
 inv_deny v_noplug  "carpeta plugins ausente: bloquea (no es un inventario vacío)"
 inv_pass v_aralia  "mu-plugin aralia-* en disco: se permite (es código propio)"
+inv_deny v_opt_n   "carpeta '-n' (nombre de opción de echo) con shell.php: bloquea"
+inv_deny v_opt_e   "carpeta '-e': bloquea"
+inv_deny v_opt_ne  "tema '-ne' no inventariado: bloquea"
+inv_deny v_idx_dir "index.php que es una carpeta con código: bloquea"
+inv_deny v_idx_eval "index.php de 23 bytes con eval (webshell corta): bloquea"
+inv_deny v_idx_lnk "index.php que es un enlace simbólico: bloquea"
+inv_deny v_htaccess "wp-content/.htaccess: bloquea"
+inv_deny v_userini "wp-content/.user.ini: bloquea"
+inv_pass v_idx_ok  "index.php legítimo de WordPress (\"Silence is golden\"): pasa"
 # remove_orphans no se deja engañar por nombres con salto de línea: falla en vez de borrar un trozo
 mkiv; : > "$IV/wp-content/mu-plugins/aralia-x"$'\n'"index.php"; echo keep > "$IV/wp-config.php"
 if ( remove_orphans "$SRC" "" "$IV" ) >/dev/null 2>&1; then fail "remove_orphans con nombre raro debía fallar"; else pass "remove_orphans con nombre con salto de línea: falla cerrado"; fi
@@ -537,6 +564,8 @@ rb() { ( LOCAL_LOG_DIR="$RH"; REPO_ROOT="$V"; PRODUCTION_SSH=h; PRODUCTION_PATH=
 	rollback "$1" ) >"$T/rb.out" 2>&1; }
 rm -f "$T/rb.called"; : > "$RH/production.log"
 if rb "$VS"; then fail "rollback a un SHA ausente del registro debía bloquear"; else pass "rollback a un SHA que nunca se desplegó: bloquea"; fi
+echo "2026-01-01T00:00:00Z $VS s rollback x" > "$RH/production.log"
+if rb "$VS"; then fail "rollback a un SHA que solo figura como rollback debía bloquear"; else pass "rollback: una línea 'rollback' del registro no basta, hace falta 'verified'"; fi
 echo "2026-01-01T00:00:00Z $VS s verified x" > "$RH/production.log"
 if rb "$VS" && [ "$(cat "$T/rb.called")" = "applied rollback" ]; then pass "rollback a un SHA verificado con paquete íntegro: se aplica como rollback"; else fail "rollback válido: $(tail -1 "$T/rb.out")"; fi
 rm -f "$T/rb.called"; echo tamper >> "$RH/releases/aralia-$VS.tar.gz"

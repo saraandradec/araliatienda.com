@@ -25,7 +25,8 @@
 #      DISTINTO de la autora. La lista se lee del último despliegue a producción (no del commit a desplegar);
 #      el alta de la primera revisora exige una confirmación escrita de Sara (ALTA-REVISORA);
 #   5. los terceros del servidor (núcleo, plugins, mu-plugins, drop-ins y versiones) coinciden con ops/third-party.lock
-#      del commit, y en producción con los que se probaron en staging para ese SHA;
+#      del commit (en un rollback, del último despliegue verificado), antes y después de copiar, y en producción con los
+#      que se probaron en staging para ese SHA;
 #   6. una simulación (rsync -n) que Sara revisa y confirma.
 # Solo despliega CÓDIGO PROPIO: el plugin aralia-core, el tema aralia y los mu-plugins aralia-*, cada uno con --delete
 # acotado a sí mismo. WordPress, WooCommerce, Wompi, Wordfence y LiteSpeed los instala y actualiza Hostinger/wp-admin;
@@ -35,6 +36,8 @@
 # Configuración (no secreta, fuera del repositorio, modo 600): ~/.aralia-deploy/deploy.conf, a partir de ops/deploy.conf.sample.
 
 set -euo pipefail
+# Orden y rangos de caracteres independientes del locale (listados del servidor, sort de la huella, regex).
+export LC_ALL=C
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 SELF="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
@@ -44,7 +47,7 @@ REPO_ROOT="$(cd "$PROJECT_DIR/.." && pwd -P)"
 # Compatible con el bash 3.2 de macOS (sin mapfile ni arrays asociativos).
 
 # Plugins de terceros que se instalan y actualizan en Hostinger (lista cerrada, R-15). Este script NO los despliega ni
-# los toca: solo comprueba su integridad en el servidor tras desplegar. UpdraftPlus Premium se instala a mano.
+# los toca: comprueba su lista y versiones en el servidor antes y después de desplegar (check_third_party). UpdraftPlus Premium se instala a mano.
 THIRD_PARTY_PLUGINS=(woocommerce wompi-portal-de-pagos wordfence litespeed-cache)
 
 # Revisión obligatoria para TODO el repo salvo documentación que no se despliega ni controla el despliegue.
@@ -203,6 +206,7 @@ remove_orphans() {
 orphan_delete() {
 	local host="$1" path="$2" rel="$3" dry="$4"
 	if [ "$dry" = "-n" ]; then printf '*deleting   %s (huérfano: ya no está en el paquete)\n' "$rel"; return 0; fi
+	assert_no_links "$host" "$path" || return 1
 	on_target "$host" "rm -rf '$path/$rel'" || return 1
 }
 
@@ -311,7 +315,6 @@ install_launcher() {
 
 deploy_log() { echo "$LOCAL_LOG_DIR/$1.log"; }
 
-# Último SHA registrado para un destino (vacío si no hay registro o está vacío).
 # Último SHA desplegado y VERIFICADO en un destino (los rollback no mueven el ancla de confianza).
 last_deployed() {
 	local f; f="$(deploy_log "$1")"
@@ -553,7 +556,9 @@ THIRD_PARTY_REQUIRED=(woocommerce wompi-portal-de-pagos wordfence)   # deben est
 list_dir() {
 	local miss=3
 	[ "${3:-required}" = optional ] && miss=0
-	on_target "$1" "cd '$2' 2>/dev/null || exit $miss; for f in * .[!.]* ..?*; do [ -e \"\$f\" ] || [ -L \"\$f\" ] || continue; case \"\$f\" in *[!A-Za-z0-9._-]*) echo '@@BAD@@'; continue;; esac; if [ \"\$f\" = index.php ] && [ \"\$(wc -c < \"\$f\")\" -gt 64 ]; then echo '@@BAD@@'; continue; fi; echo \"\$f\"; done"
+	# printf (no echo: un nombre como "-n" desaparecería). index.php solo si es un archivo regular, no enlace, y su contenido
+	# (sin espacios) es exactamente el "Silence is golden" de WordPress; cualquier otro es @@BAD@@.
+	on_target "$1" "export LC_ALL=C; [ -d '$2' ] || exit $miss; cd '$2' && [ -r . ] && [ -x . ] || exit 3; for f in * .[!.]* ..?*; do [ -e \"\$f\" ] || [ -L \"\$f\" ] || continue; case \"\$f\" in *[!A-Za-z0-9._-]*) printf '@@BAD@@\\n'; continue;; esac; if [ \"\$f\" = index.php ]; then if [ -f \"\$f\" ] && [ ! -L \"\$f\" ] && [ \"\$(head -c 200 \"\$f\" | tr -d ' \\t\\r\\n')\" = '<?php//Silenceisgolden.' ]; then printf '%s\\n' \"\$f\"; else printf '@@BAD@@\\n'; fi; continue; fi; printf '%s\\n' \"\$f\"; done"
 }
 
 # Extensiones que Apache/LiteSpeed pueden ejecutar (sin distinguir mayúsculas), también como doble extensión.
@@ -596,6 +601,8 @@ inventory_fs() {
 		[ -n "$e" ] || continue
 		[[ "$e" =~ ^[A-Za-z0-9._-]+$ ]] || die "Nombre no permitido en wp-content del servidor (caracteres raros o index.php sospechoso): $e"
 		[ "$e" = index.php ] && continue
+		# Archivos ocultos en wp-content (.htaccess, .user.ini...) pueden cambiar cómo se ejecuta todo el árbol.
+		[[ "$e" != .* ]] || die "Archivo oculto no permitido en wp-content: $e"
 		exec_name "$e" || continue
 		# Un archivo ejecutable suelto en wp-content solo puede ser un drop-in con nombre exacto x.php (sin mayúsculas ni dobles extensiones).
 		[[ "$e" =~ ^[a-z0-9_-]+\.php$ ]] || die "Archivo ejecutable no permitido en wp-content: $e"
@@ -652,9 +659,14 @@ check_third_party() {
 				done
 				# La huella usa lo que el lock deja abierto (any), no el valor real: una actualización de UpdraftPlus no la rompe.
 				vnorm="$ver"; grep -qxF "plugin $name any" <<<"$manifest" && vnorm=any
-				norm="${norm}plugin $name $vnorm"$'\n' ;;
+				norm="${norm}plugin $name $vnorm $status"$'\n' ;;
 		esac
 	done <<<"$list"
+	local theme_active
+	theme_active="$(on_target "$host" "cd '$path' && wp theme list --status=active --field=name --skip-plugins --skip-themes")" || die "No se pudo leer el tema activo"
+	[[ "$theme_active" =~ ^[A-Za-z0-9._-]+$ ]] || die "Tema activo con formato inesperado: $theme_active"
+	if [ "$theme_active" != aralia ]; then grep -qxF "theme $theme_active" <<<"$manifest" || die "Tema activo no inventariado: $theme_active"; fi
+	norm="${norm}activetheme $theme_active"$'\n'
 	for req in "${THIRD_PARTY_REQUIRED[@]}"; do
 		case "$seen" in *" $req "*) ;; *) die "Falta el plugin $req (debe estar instalado y activo)" ;; esac
 	done
@@ -760,7 +772,7 @@ rollback() {
 	valid_sha "$sha" || die "Uso: ops/deploy.sh rollback <sha de 40 caracteres>"
 	require_trusted_launcher
 	load_conf
-	grep -q " $sha " "$(deploy_log production)" 2>/dev/null || die "$sha no figura en el registro de producción: solo se puede volver a un SHA ya desplegado"
+	awk -v s="$sha" '$2==s && $4=="verified" { f=1 } END { exit !f }' "$(deploy_log production)" 2>/dev/null || die "$sha no figura como desplegado y verificado en el registro de producción: solo se puede volver a un SHA verificado"
 	rel="$LOCAL_LOG_DIR/releases"
 	[ -f "$rel/aralia-$sha.tar.gz" ] && [ -f "$rel/aralia-$sha.tar.gz.sha256" ] || die "No hay paquete guardado de $sha en $rel"
 	git -C "$REPO_ROOT" cat-file -e "$sha^{commit}" 2>/dev/null || die "Falta el commit $sha en este clon: git fetch origin"

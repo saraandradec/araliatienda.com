@@ -1,6 +1,6 @@
 # Lista cerrada de lo que Hostinger/wp-admin instala (research R-15, constitución 1.2.0). ops/deploy.sh la lee DEL COMMIT que se
 # despliega y, antes de copiar nada, falla si el servidor tiene algo que no esté aquí o con otra versión. Dos comprobaciones:
-# inventario por archivos (carpetas de plugins, temas, mu-plugins y *.php sueltos de wp-content; sin ejecutar PHP) y WP-CLI.
+# inventario por archivos (carpetas de plugins, temas y mu-plugins, y en wp-content cualquier archivo con extensión ejecutable (mayúsculas o dobles extensiones incluidas) u oculto; sin ejecutar PHP; nombres fuera de [A-Za-z0-9._-] e index.php que no sean el de WordPress se rechazan) y WP-CLI.
 # Formato (una entrada por línea):
 #   core    <versión>                 WordPress: exacta (7.1.4) o de la serie (7.1.* = cualquier 7.1.x, deja activas las menores automáticas)
 #   plugin  <slug> <versión|any>      "any" solo para lo que no se puede fijar (UpdraftPlus Premium, instalación manual)
