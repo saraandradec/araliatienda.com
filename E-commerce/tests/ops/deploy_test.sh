@@ -168,6 +168,7 @@ conf "${good[@]}" 'PRODUCTION_PATH="/a b; rm -rf /"';     expect_fail parse_conf
 conf "${good[@]}" 'PRODUCTION_PATH="/srv/x/../prod"';     expect_fail parse_conf "$T/c.conf"
 conf "${good[@]}" 'PRODUCTION_PATH="/srv//prod"';         expect_fail parse_conf "$T/c.conf"
 conf "${good[@]}" 'PRODUCTION_PATH="/srv/prod/"';          expect_fail parse_conf "$T/c.conf"
+conf "${good[@]}" 'STAGING_PATH="/srv/staging/"';          expect_fail parse_conf "$T/c.conf"
 conf "${good[@]}" 'PRODUCTION_SSH="-oProxyCommand=x"';    expect_fail parse_conf "$T/c.conf"
 conf "${good[@]}" 'REPO_DIR="relativa"';                  expect_fail parse_conf "$T/c.conf"
 conf "${good[@]}" 'REPO_DIR="/tmp/$(id)"';                expect_fail parse_conf "$T/c.conf"
@@ -376,7 +377,7 @@ on_target() {
 		*"cd '/p/wp-content' "*)           printf '%s\n' "$CT_FS_WPC" ;;
 		*"wp core verify-checksums"*)   echo "${CT_WARN}Success: WordPress installation verifies against checksums." ;;
 		*"wp core version"*)            echo "$CT_CORE" ;;
-		*"wp plugin verify-checksums"*) echo "${CT_WARN}Success: Verified 4 of 4 plugins." ;;
+		*"wp plugin verify-checksums"*) printf '%s\n' "$2" >> "$T/ck.args"; echo "${CT_WARN}Success: Verified 4 of 4 plugins." ;;
 		*"wp plugin list"*)             printf '%s\n' "$CT_PLIST" ;;
 		*"wp theme list"*)              printf '%s\n' "$CT_THEME" ;;
 		*) return 1 ;;
@@ -418,6 +419,19 @@ CT_PLIST="${PLIST_OK/wordfence,active,9.0.2,off/}"; ct_deny "Wordfence ausente: 
 CT_PLIST="$PLIST_OK"; CT_CORE="7.1.4"
 CT_CORE="7.1.4"; CT_WARN="Warning: Could not retrieve the checksums. "; ct_deny "verify-checksums con avisos: bloquea"
 CT_WARN=""; ct 0123456789abcdef0123456789abcdef01234567 && fail "SHA sin ops/third-party.lock debía bloquear" || pass "commit sin ops/third-party.lock: bloquea"
+# Checksums: solo plugins con versión exacta e instalados; los obligatorios no pueden ir con "any"
+rm -f "$T/ck.args"; ct_pass "checksums: se ejecutan"
+grep -q 'verify-checksums woocommerce wompi-portal-de-pagos wordfence --skip' "$T/ck.args" && ! grep -q updraftplus "$T/ck.args" && pass "checksums solo de plugins con versión exacta (no updraftplus 'any')" || fail "checksums solo de plugins con versión exacta: $(cat "$T/ck.args")"
+mklock() { printf "$1" > "$V/E-commerce/ops/third-party.lock"; git -C "$V" add -A; git -C "$V" commit -q -m lock; git -C "$V" rev-parse HEAD; }
+L_ANY="$(mklock 'core 7.1.*\nplugin woocommerce 11.2.1\nplugin wompi-portal-de-pagos any\nplugin wordfence 9.0.2\nplugin updraftplus any\ntheme twentytwentysix\nmu hostinger-tools\ndropin advanced-cache\n')"
+L_LS="$(mklock 'core 7.1.*\nplugin woocommerce 11.2.1\nplugin wompi-portal-de-pagos 3.2.1\nplugin wordfence 9.0.2\nplugin litespeed-cache 7.9.2\nplugin updraftplus any\ntheme twentytwentysix\nmu hostinger-tools\ndropin advanced-cache\n')"
+L_BAD="$(mklock 'core 7.1.*\nplugin woocommerce 11.2.1\nplugin wompi-portal-de-pagos 3.2.1\nplugin wordfence 9.0.2\nplugin --all 1.0\ntheme twentytwentysix\nmu hostinger-tools\ndropin advanced-cache\n')"
+git -C "$V" reset -q --hard "$VS"
+if ct "$L_ANY"; then fail "Wompi con 'any' en el lock debía bloquear"; else pass "un plugin obligatorio con 'any' en el lock: bloquea"; fi
+rm -f "$T/ck.args"
+if ct "$L_LS"; then pass "plugin con versión exacta en el lock pero no instalado (litespeed): no bloquea"; else fail "litespeed no instalado no debe bloquear: $(tail -1 "$T/ct.out")"; fi
+! grep -q litespeed "$T/ck.args" && pass "y no se le pide checksum" || fail "no debe pedirse checksum de un plugin no instalado"
+if ct "$L_BAD"; then fail "slug '--all' en el lock debía bloquear"; else pass "slug con guion inicial en el lock: bloquea"; fi
 unset -f on_target
 on_target() {
 	local host="$1"; shift
@@ -481,7 +495,7 @@ echo t > "$AP/aralia-$ASHA.tar.gz"; echo s > "$AP/aralia-$ASHA.tar.gz.sha256"
 apply() { # $1 kind; $2 confirmación escrita; $3 stub de sync (ok|failreal|failsim); $4 stub de verify (ok|fail); $5 allow; $6 tp de staging (abc|none|otro)
 	rm -rf "$AH"; mkdir -p "$AH"; : > "$T/launcher.called"; rm -f "$T/ct.n" "$T/ct.args"
 	rm -rf "$AP/x/wp-content"; mkdir -p "$AP/x/wp-content/plugins/aralia-core"
-	[ "${NO_BASELINE:-}" = 1 ] || echo "<?php // WP_CLI::add_command( 'aralia baseline', X );" > "$AP/x/wp-content/plugins/aralia-core/cli.php"
+	[ "${NO_BASELINE:-}" = 1 ] || printf '%s\n' "<?php" "WP_CLI::add_command( 'aralia baseline', X );" > "$AP/x/wp-content/plugins/aralia-core/cli.php"
 	[ -z "${APPLY_SEED:-}" ] || printf '%s\n' "$APPLY_SEED" > "$AH/production.log"
 	case "${6:-abc}" in none) echo "2026-01-01T00:00:00Z $ASHA s verified launcher=x allow=" > "$AH/staging.log" ;; *) echo "2026-01-01T00:00:00Z $ASHA s verified launcher=x allow= tp=${6:-abc}" > "$AH/staging.log" ;; esac
 	( LOCAL_LOG_DIR="$AH"; SELF="$T/self.sh"; echo '#!/bin/sh' > "$SELF"
@@ -633,6 +647,8 @@ GH_PRS="12 sara"
 gate_pass "primer despliegue: ALTA-REVISORA y aprobación vigente" "$CB" "ALTA-REVISORA"
 GH_NCOMMITS=250; GH_REVIEWS=$'carol APPROVED headsha\n'
 gate_deny "PR con 250 commits o más (la API no los lista todos): bloquea" "$CB" "ALTA-REVISORA"
+GH_NCOMMITS=249
+gate_pass "PR con 249 commits (por debajo del tope de la API): pasa" "$CB" "ALTA-REVISORA"
 GH_NCOMMITS=1
 gate_deny "primer despliegue sin confirmación escrita: bloquea" "$CB" "no"
 GH_REVIEWS=$'sara APPROVED headsha\n'
@@ -701,6 +717,13 @@ gate_deny "último despliegue desconocido en este clon: bloquea" "$CC"
 set_last "$CC"
 gate_deny "el SHA a desplegar no desciende del último despliegue: bloquea" "$CA"
 
+echo "baseline en el paquete (vuelta 12)"
+BP="$T/bp"; rm -rf "$BP"; mkdir -p "$BP/wp-content/plugins/aralia-core" "$BP/wp-content/mu-plugins"
+printf '%s\n' "<?php" "// WP_CLI::add_command( 'aralia baseline', X );" "/* WP_CLI::add_command( 'aralia baseline', X ); */" " * WP_CLI::add_command( 'aralia baseline', X );" > "$BP/wp-content/plugins/aralia-core/c.php"
+package_has_baseline "$BP" && fail "un comentario no debe bastar" || pass "baseline mencionado solo en comentarios: no cuenta"
+printf '%s\n' "<?php" "\\WP_CLI::add_command( \"aralia baseline\", X );" > "$BP/wp-content/mu-plugins/aralia-cli.php"
+package_has_baseline "$BP" && pass "baseline registrado en un mu-plugin aralia-*: cuenta" || fail "baseline en mu-plugin debe contar"
+( on_target() { case "$2" in *"aralia baseline check"*) return 1 ;; esac; return 0; }; verify_target staging h /p yes ) >/dev/null 2>&1 && fail "staging con paquete que trae baseline: debe ejecutarlo y fallar" || pass "staging con paquete que trae baseline: lo ejecuta (si falla, no verifica)"
 echo "verify_target (vuelta 10)"
 ( on_target() { case "$2" in *"wp core is-installed"*"has-command"*) return 1 ;; esac; return 0; }
   ! verify_target staging h /p ) >/dev/null 2>&1 && pass "staging con WordPress/WP-CLI roto: la verificación falla" || fail "staging con WordPress/WP-CLI roto: la verificación falla"

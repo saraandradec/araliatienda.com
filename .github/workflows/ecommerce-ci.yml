@@ -135,9 +135,9 @@ jobs:
           mkdir -p .wp-env-private
           printf '%s' "$ARALIA_CI_SECRETS" > .wp-env-private/aralia-secrets.php
           # Wompi de producción, y credenciales que no se distinguen por prefijo entre prueba y producción:
-          # Brevo (xkeysib-), Meta CAPI (token EAA...), Turnstile real (0x4AAAAAAA...; las de prueba son 1x/2x/3x0000...)
+          # Brevo (xkeysib-), Meta CAPI (token EAA...), Turnstile real (0x4...; las de prueba son 1x/2x/3x0000...)
           # y cuenta de servicio de Google (service_account / private_key).
-          if grep -Eq "(prv|pub)_prod_|prod_(events|integrity)_|xkeysib-|EAA[A-Za-z0-9]{100,}|0x4AAAAAAA|service_account|BEGIN (RSA |EC )?PRIVATE KEY" .wp-env-private/aralia-secrets.php; then
+          if grep -Eq "(prv|pub)_prod_|prod_(events|integrity)_|xkeysib-|EAA[A-Za-z0-9]{100,}|0x4[A-Za-z0-9_-]{16,}|service_account|BEGIN ([A-Z]+ )?PRIVATE KEY" .wp-env-private/aralia-secrets.php; then
             echo "::error::El secreto de CI contiene credenciales que no son de prueba"; exit 1
           fi
 

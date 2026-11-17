@@ -8,7 +8,7 @@
 #   mu      <nombre>                  mu-plugins ajenos, SIN .php (los aralia-* son código propio y no se listan)
 #   dropin  <nombre>                  drop-ins de wp-content, SIN .php (advanced-cache, object-cache…)
 # woocommerce, wompi-portal-de-pagos y wordfence deben estar instalados y ACTIVOS. Wompi con auto_update apagado.
-# Cambiar una versión = PR aprobado + probar en staging (T168). Mantener igual que ops/inventory.md y composer.json.
+# Cambiar una versión = PR aprobado + probar en staging (T168). Mantener igual que ops/inventory.md (composer.json solo declara lo necesario para pruebas: no incluye litespeed-cache ni updraftplus). Una versión exacta implica verificar sus checksums si el plugin está instalado; woocommerce, wompi-portal-de-pagos y wordfence NO admiten `any`.
 core 7.1.*
 plugin woocommerce 11.2.1
 plugin wompi-portal-de-pagos 3.2.1

@@ -459,7 +459,7 @@ reviewers_at() {
 
 # Puerta de revisión independiente (CM ítem 11, PCI 6.2.3).
 check_payment_reviews() {
-	local sha="$1" last base range trusted new reviewers c prs ok n author head r answer commits_raw owner prauthors reviews signed
+	local sha="$1" last base range trusted new reviewers c prs ok n author head r answer commits_raw owner prauthors reviews signed prinfo ncommits
 	owner="$(echo "${REPO%%/*}" | tr 'A-Z' 'a-z')"
 	last="$(last_deployed production)"
 	if [ -n "$last" ]; then
@@ -614,7 +614,7 @@ inventory_fs() {
 }
 
 check_third_party() {
-	local sha="$1" host="$2" path="$3" manifest cksum_plugins out core_v list norm name status ver au k v ok req seen=" " core_norm="" vnorm
+	local sha="$1" host="$2" path="$3" manifest cksum_candidates cksum_plugins installed out core_v list norm name status ver au k v ok req seen=" " core_norm="" vnorm
 	manifest="$(git -C "$REPO_ROOT" show "$sha:$PROJECT_REL/ops/third-party.lock" 2>/dev/null | sed 's/#.*//; s/[[:space:]]*$//' | awk 'NF')" || true
 	[ -n "$manifest" ] || die "Falta ops/third-party.lock en $sha (lista cerrada de terceros y versiones)"
 	inventory_fs "$host" "$path" "$manifest"
@@ -630,15 +630,27 @@ check_third_party() {
 		case "$core_v" in $v) ok=yes; core_norm="core $v" ;; esac
 	done <<<"$manifest"
 	[ "$ok" = yes ] || die "WordPress $core_v no coincide con ops/third-party.lock de $sha"
-	# Checksums solo de los plugins con versión exacta en el lock (los "any" no se pueden verificar): añadir o quitar un tercero
-	# es una línea en el lock, no un cambio de este script.
-	cksum_plugins="$(awk '$1=="plugin" && $3!="any" {print $2}' <<<"$manifest" | tr '\n' ' ')"
+	list="$(on_target "$host" "cd '$path' && wp plugin list --fields=name,status,version,auto_update --format=csv --skip-plugins --skip-themes")" || die "No se pudo listar los plugins"
+	# Checksums solo de los plugins con versión exacta en el lock (los "any" no se pueden verificar) que estén instalados: añadir o
+	# quitar un tercero es una línea en el lock, no un cambio de este script. Los obligatorios NO pueden ir con "any" (se quedarían
+	# sin verificar sin que nadie lo note) y, si faltan, se detectan más abajo (Falta el plugin ...).
+	cksum_candidates="$(awk '$1=="plugin" && $3!="any" {print $2}' <<<"$manifest")"
+	for req in "${THIRD_PARTY_REQUIRED[@]}"; do
+		grep -qxF "$req" <<<"$cksum_candidates" || die "ops/third-party.lock: $req debe tener versión exacta (no 'any'): sus checksums se verifican siempre"
+	done
+	installed="$(cut -d, -f1 <<<"$list")"
+	cksum_plugins=""
+	while IFS= read -r name; do
+		[ -n "$name" ] || continue
+		[[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "ops/third-party.lock: nombre de plugin no válido: $name"
+		grep -qxF "$name" <<<"$installed" && cksum_plugins="$cksum_plugins$name "
+	done <<<"$cksum_candidates"
+	cksum_plugins="${cksum_plugins% }"
 	if [ -n "$cksum_plugins" ]; then
-		[[ "$cksum_plugins" =~ ^[A-Za-z0-9._\ -]+$ ]] || die "ops/third-party.lock: nombre de plugin no válido"
 		out="$(on_target "$host" "cd '$path' && wp plugin verify-checksums $cksum_plugins --skip-plugins --skip-themes 2>&1")" || die "wp plugin verify-checksums falló: $out"
 		if grep -qi 'warning' <<<"$out"; then die "wp plugin verify-checksums con avisos: $out"; fi
+		info "Checksums verificados: $cksum_plugins"
 	fi
-	list="$(on_target "$host" "cd '$path' && wp plugin list --fields=name,status,version,auto_update --format=csv --skip-plugins --skip-themes")" || die "No se pudo listar los plugins"
 	norm="${core_norm}"$'\n'
 	while IFS=, read -r name status ver au; do
 		{ [ -n "$name" ] && [ "$name" != name ]; } || continue
@@ -692,14 +704,20 @@ staging_tp_matches() {
 }
 
 verify_target() {
-	local target="$1" host="$2" path="$3" baseline
-	if [ "$target" = production ]; then
+	local target="$1" host="$2" path="$3" has_baseline="${4:-no}" baseline
+	# Si el paquete trae el comando, en staging TAMBIÉN es obligatorio ejecutarlo (así el SHA que llega a producción ya lo pasó).
+	if [ "$target" = production ] || [ "$has_baseline" = yes ]; then
 		baseline="wp aralia baseline check"
 	else
-		# wp core is-installed falla si WordPress o WP-CLI están rotos: eso NO es "el comando aún no existe".
+		# Solo mientras el paquete aún no trae el comando (antes de T032). wp core is-installed falla si WordPress o WP-CLI están rotos.
 		baseline="wp core is-installed && if wp cli has-command 'aralia baseline'; then wp aralia baseline check; else echo 'aviso: baseline check aún no existe (fase 2)'; fi"
 	fi
 	on_target "$host" "cd '$path' && $baseline"
+}
+
+# El paquete registra el comando de verdad (no basta un comentario o un docblock que lo mencione).
+package_has_baseline() {
+	grep -rqsE --include='*.php' "^[^/*#]*add_command\([[:space:]]*['\"]aralia baseline['\"]" "$1/wp-content/plugins/aralia-core" "$1/wp-content/mu-plugins"
 }
 
 DEPLOY_TMP=""
@@ -707,7 +725,7 @@ cleanup() { [ -n "$DEPLOY_TMP" ] && rm -rf "$DEPLOY_TMP"; return 0; }
 
 # Simulación, confirmación, copia, verificación y registro (compartido por deploy y rollback).
 apply_release() {
-	local target="$1" sha="$2" tmp="$3" host="$4" path="$5" kind="$6" confirm="$7" answer nchanges ndel flags="" lock_sha tp_before who
+	local target="$1" sha="$2" tmp="$3" host="$4" path="$5" kind="$6" confirm="$7" answer nchanges ndel flags="" lock_sha tp_before who hb
 	# Un rollback comprueba los terceros contra el lock del último despliegue verificado (lo que debe estar instalado AHORA),
 	# no contra el del SHA de destino: si después se actualizó un tercero, el lock antiguo ya no describe el servidor.
 	lock_sha="$sha"
@@ -718,7 +736,7 @@ apply_release() {
 	# En un rollback no se exige: el sitio puede estar roto justo por el código que se quiere retirar.
 	if [ "$target" = production ] && [ "$kind" = verified ]; then
 		# Se comprueba el PAQUETE (lo que va a quedar instalado), no el servidor: en el primer despliegue el servidor aún no tiene aralia-core.
-		grep -rqs --include='*.php' "aralia baseline" "$tmp/x/wp-content/plugins/aralia-core" \
+		package_has_baseline "$tmp/x" \
 			|| die "El paquete no trae 'wp aralia baseline check' (Fase 2, T032): no se despliega hasta que exista, para no copiar y fallar la verificación"
 	fi
 	info "Simulación en $target ($host:$path):"
@@ -736,7 +754,8 @@ apply_release() {
 	# Los terceros pudieron cambiar entre la comprobación y la copia (o durante ella): se repite antes de registrar.
 	check_third_party "$lock_sha" "$host" "$path"
 	[ "$TP_HASH" = "$tp_before" ] || die "Los terceros del servidor cambiaron durante el despliegue en $target (huella $tp_before → $TP_HASH). No queda registrado: revisa y repite"
-	verify_target "$target" "$host" "$path" \
+	hb=no; package_has_baseline "$tmp/x" && hb=yes
+	verify_target "$target" "$host" "$path" "$hb" \
 		|| die "Verificación fallida en $target. No queda registrado. Si es producción: activa el modo mantenimiento de pagos y vuelve a un SHA bueno con ops/deploy.sh rollback <sha> (ops/runbooks/deploy.md)"
 	mkdir -p "$LOCAL_LOG_DIR/releases" && chmod 700 "$LOCAL_LOG_DIR"
 	if [ "$target" = production ] && [ "$kind" = verified ]; then
