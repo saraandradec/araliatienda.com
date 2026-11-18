@@ -19,6 +19,14 @@
 
 	<config name="minimum_wp_version" value="7.1"/>
 	<config name="testVersion" value="8.2-"/>
+	<rule ref="WordPress.WP.Capabilities">
+		<properties>
+			<property name="custom_capabilities" type="array">
+				<element value="manage_woocommerce"/>
+				<element value="edit_products"/>
+			</property>
+		</properties>
+	</rule>
 
 	<rule ref="WordPress-Extra"/>
 	<rule ref="WordPress.Security"/>

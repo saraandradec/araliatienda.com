@@ -91,6 +91,7 @@ final class Plugin {
 		// El despliegue copia archivos (no activa el plugin): las migraciones también se aplican al cargar.
 		add_action( 'plugins_loaded', array( $this, 'maybe_migrate' ), 5 );
 		add_action( 'init', array( $this, 'register_security' ), 1 );
+		\Aralia\Catalog\Taxonomies::register();
 		add_action( 'cli_init', array( $this, 'register_cli' ) );
 	}
 
@@ -104,6 +105,14 @@ final class Plugin {
 		\Aralia\Security\Csp::register();
 		\Aralia\Cache\PaymentPages::register();
 		( new \Aralia\Cache\CacheInvalidator() )->register();
+		\Aralia\Catalog\ProductMeta::register();
+		\Aralia\Catalog\PublishRule::register();
+		if ( is_admin() ) {
+			\Aralia\Admin\IncompleteCatalog::register();
+			\Aralia\Admin\ImportScreen::register();
+			\Aralia\Admin\QuickProduct::register();
+			\Aralia\Admin\ToneFamilies::register();
+		}
 		( new \Aralia\Support\Maintenance() )->register();
 		( new \Aralia\Security\Turnstile() )->register();
 
@@ -181,6 +190,7 @@ final class Plugin {
 		\WP_CLI::add_command( 'aralia', \Aralia\Cli\RootCommand::class );
 		\WP_CLI::add_command( 'aralia setup', \Aralia\Cli\SetupCommand::class );
 		\WP_CLI::add_command( 'aralia baseline', \Aralia\Cli\BaselineCommand::class );
+		\WP_CLI::add_command( 'aralia catalog', \Aralia\Cli\CatalogCommand::class );
 		// Herramientas de prueba: no se registran en producción ni sin ARALIA_ENV (defensa adicional a la comprobación del comando).
 		if ( \Aralia\Support\Environment::allows_replay() ) {
 			\WP_CLI::add_command( 'aralia wompi replay', \Aralia\Cli\WompiReplayCommand::class );

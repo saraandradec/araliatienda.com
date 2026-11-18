@@ -94,6 +94,7 @@ class Maintenance {
 	 * @return int Filas purgadas.
 	 */
 	public function hourly(): int {
+		\Aralia\Catalog\MediaZip::purge_stale(); // Carpetas temporales de importaciones abandonadas.
 		return ( new RateLimiter() )->purge_expired();
 	}
 

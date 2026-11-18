@@ -99,15 +99,28 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
 
 ### Catálogo
 
-- [ ] T038 Registrar las 7 categorías, `aralia_seccion` (8), `aralia_paso` (7, con `requires_tone`) y los atributos globales `pa_tono` (swatch, subtono, orden), `pa_color`, `pa_look` y `pa_tipo_bolsa` en `core/src/Catalog/Taxonomies.php`
-- [ ] T039 Registrar los metadatos de producto (`_ara_tone_dependent`, `_ara_cost` privado y fuera de REST, `_ara_swatch_id`, `_ara_invima`, `_ara_how_to`, `_ara_ingredients`, `_ara_kind`, `_ara_components`, `_ara_price_history`) en `core/src/Catalog/ProductMeta.php`
-- [ ] T040 [P] Escribir la prueba de que `_ara_cost` no aparece en la Store API, `wc/v3`, los feeds ni el HTML en `tests/php/integration/CostExposureTest.php`
-- [ ] T041 Implementar la regla de publicación (solo en la transición a `publish`; nunca despublica por agotamiento) y la pantalla "Catálogo incompleto" en `core/src/Catalog/PublishRule.php` y `core/src/Admin/IncompleteCatalog.php`, con su prueba en `tests/php/unit/PublishRuleTest.php`
-- [ ] T042 Crear el alta rápida de producto con todos los atributos de 8.1 en una sola pantalla (FR-065, FR-067) y la edición de las familias de tono con su swatch, subtono y orden (FR-068) en `core/src/Admin/QuickProduct.php` y `core/src/Admin/ToneFamilies.php`
-- [ ] T043 Implementar el validador del CSV (columnas, listas controladas, inyección de fórmulas, diferencias de precio mayores al 20%) y `wp aralia catalog validate` en `core/src/Catalog/Validator.php`
-- [ ] T044 Implementar el importador con la API CRUD: variaciones por tono, marca, swatches, cross-sells por SKU, fotos por nombre y borrador si la fila está incompleta. En `core/src/Catalog/Importer.php`
-- [ ] T045 Implementar la pantalla "Importar inventario" (CSV + ZIP con validación de MIME real, sin rutas relativas ni absolutas, máx. 200 archivos y 100 MB, extracción fuera de `uploads/`, vista previa y confirmación; L-06) en `core/src/Admin/ImportScreen.php`
-- [ ] T046 [P] Escribir las pruebas del validador, del importador y del ZIP (incluye un ZIP con zip slip) con fixtures en `tests/php/integration/ImportTest.php` y `tests/fixtures/inventory/`
+- [X] T038 Registrar las 7 categorías, `aralia_seccion` (8), `aralia_paso` (7, con `requires_tone`) y los atributos globales `pa_tono` (swatch, subtono, orden), `pa_color`, `pa_look` y `pa_tipo_bolsa` en `core/src/Catalog/Taxonomies.php`
+- [X] T039 Registrar los metadatos de producto (`_ara_tone_dependent`, `_ara_cost` privado y fuera de REST, `_ara_swatch_id`, `_ara_invima`, `_ara_how_to`, `_ara_ingredients`, `_ara_kind`, `_ara_components`, `_ara_price_history`) en `core/src/Catalog/ProductMeta.php`
+- [X] T040 [P] Escribir la prueba de que `_ara_cost` no aparece en la Store API, `wc/v3`, los feeds ni el HTML en `tests/php/integration/CostExposureTest.php`
+- [X] T041 Implementar la regla de publicación (solo en la transición a `publish`; nunca despublica por agotamiento) y la pantalla "Catálogo incompleto" en `core/src/Catalog/PublishRule.php` y `core/src/Admin/IncompleteCatalog.php`, con su prueba en `tests/php/unit/PublishRuleTest.php`
+- [X] T042 Crear el alta rápida de producto con todos los atributos de 8.1 en una sola pantalla (FR-065, FR-067) y la edición de las familias de tono con su swatch, subtono y orden (FR-068) en `core/src/Admin/QuickProduct.php` y `core/src/Admin/ToneFamilies.php`
+- [X] T043 Implementar el validador del CSV (columnas, listas controladas, inyección de fórmulas, diferencias de precio mayores al 20%) y `wp aralia catalog validate` en `core/src/Catalog/Validator.php`
+- [X] T044 Implementar el importador con la API CRUD: variaciones por tono, marca, swatches, cross-sells por SKU, fotos por nombre y borrador si la fila está incompleta. En `core/src/Catalog/Importer.php`
+- [X] T045 Implementar la pantalla "Importar inventario" (CSV + ZIP con validación de MIME real, sin rutas relativas ni absolutas, máx. 200 archivos y 100 MB, extracción fuera de `uploads/`, vista previa y confirmación; L-06) en `core/src/Admin/ImportScreen.php`
+- [X] T046 [P] Escribir las pruebas del validador, del importador y del ZIP (incluye un ZIP con zip slip) con fixtures en `tests/php/integration/ImportTest.php` y `tests/fixtures/inventory/`
+
+> **Deuda declarada del bloque E (Fase 2)** — no bloquea el cierre de T038–T046, se asigna así:
+> - **Historial de precios (FR-061)**: el importador y el alta rápida lo registran con el precio realmente aplicado; los cambios desde el editor nativo o `wc/v3` los engancha **T081** (tachado). Hasta entonces, el tachado solo es válido para lo importado.
+> - **Subcategoría** (lista controlada del contrato): hoy crea términos libres. Pendiente de la pantalla de subcategorías (T042 ampliada o T060).
+> - **Variaciones que desaparecen del CSV**: la importación es aditiva. Una reimportación parcial NO oculta tonos (se unen con los existentes); las variaciones ausentes del CSV siguen existiendo y vendiéndose, y retirarlas es una acción manual (o una opción de «sincronización completa» en una fase posterior).
+> - **Regla de publicación, sin prueba E2E del editor clásico** y de la publicación programada (cubiertas por lectura de código y por CRUD/`wp_update_post`/`wc/v3`); la reversión por SQL no dispara la transición `publish → draft` (ningún oyente de «publicado» existe hoy; revisar al añadir feeds, T-feeds).
+> - **Candado de importación** huérfano si el proceso muere: se libera en el `finally` ante cualquier excepción; solo si el proceso muere (timeout fatal) queda la opción huérfana, inocua, y basta volver a subir los archivos (la importación es idempotente por SKU). La purga de carpetas temporales es a las 2 h. Verificar en Hostinger (T012) que `get_temp_dir()` no cae en `wp-content` (en ese caso todo ZIP se rechaza, fallo cerrado).
+> - **Fotos duplicadas al reintentar** una confirmación que falló después de subir las imágenes (la biblioteca de medios no se deduplica): limpieza manual; se resolverá si hay cola (T-importación asíncrona).
+> - **`wc/v4` experimental**: debe seguir apagada (hay una prueba); sus respuestas no pasan por el filtro de lectura del costo.
+> - **Alta rápida**: si falla la segunda imagen, la primera queda en la biblioteca sin producto; el tope de 40 megapíxeles puede bajarse si Hostinger limita la memoria de GD.
+> - **Importación síncrona** (2000 filas, 200 fotos): candado atómico por trabajo y `set_time_limit(600)`, pero sin cola; migrar a Action Scheduler si el volumen real lo pide.
+> - **Metadatos de término de marca `_ara_ff_*`** (Full face): los registra la tarea de Full face (T117 y siguientes).
+> - **Regla de publicación**: un producto variable creado por `wc/v3` con `status=publish` y variaciones en llamadas posteriores vuelve a borrador (las variaciones aún no existen); el flujo correcto es borrador → variaciones → publicar.
 
 ### Tema base
 

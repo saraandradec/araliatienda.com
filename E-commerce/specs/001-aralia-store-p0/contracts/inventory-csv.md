@@ -27,6 +27,14 @@ Formato: UTF-8, separador `,`, primera fila = encabezados exactos. Una fila por 
 | `registro_sanitario` | No | ≤ 40 caracteres |
 | `descripcion_corta`, `como_se_usa`, `ingredientes` | No | texto plano |
 
+**Producto por tono (fila padre y variaciones)** — enmienda de la Fase 2 (bloque E):
+- La fila **padre** lleva `depende_tono=si`, nombre, categoría, subcategoría, marca, color, look, paso, `combina_con` y la `foto` (y `foto_uso`). **No** lleva `tono`, `subtono`, `precio`, `stock`, `costo` ni `swatch`: los lleva cada variación (se aceptan vacíos).
+- Cada **variación** lleva `parent_sku`, `depende_tono=si`, `tono` (de las familias vigentes en el panel, FR-068), `subtono`, `precio`, `stock`, `costo` y `swatch`. La `foto` es opcional (hereda la del padre; **la foto no cuenta como swatch**). El swatch de una variación es el suyo o el de su familia de tono.
+- El padre debe venir **en el mismo CSV** y no puede ser a su vez una variación. `combina_con` apunta a productos (padres o simples), nunca a variaciones.
+- FR-019: `depende_tono=si` solo en Piel y Cejas; nunca en Labios, Ojos ni Pestañas. Los pasos de Full face que exigen tono (corrector, rubor, cejas) exigen `depende_tono=si`.
+- Las celdas que empiezan por `=`, `+`, `-` o `@` se rechazan salvo números válidos: no empieces un texto con «-».
+- Los nombres de foto se comparan sin distinguir mayúsculas entre el CSV y el ZIP.
+
 **Flujo en el panel** (FR-065, R-09): *Productos → Importar inventario* → subir CSV (+ ZIP de fotos opcional) → validación → vista previa (altas, cambios, diferencias de precio > 20% a confirmar, filas con error) → confirmar → importador propio con la API CRUD de WooCommerce. La misma validación existe por WP-CLI (`wp aralia catalog validate archivo.csv`).
 
 **Validación previa**:
