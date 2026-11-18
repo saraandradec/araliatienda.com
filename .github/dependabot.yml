@@ -25,3 +25,9 @@ updates:
     schedule: { interval: weekly }
     labels: [dependencias]
     open-pull-requests-limit: 5
+
+  # Base de la imagen parcheada de wp-env (T165): el digest fijado en el Dockerfile se actualiza por PR revisado.
+  - package-ecosystem: docker
+    directory: "/E-commerce/ops/docker"
+    schedule: { interval: weekly }
+    labels: [dependencias, ci]

@@ -141,10 +141,14 @@ jobs:
             echo "::error::El secreto de CI contiene credenciales que no son de prueba"; exit 1
           fi
 
+      - name: Imagen base de wp-env parcheada (T165)
+        if: steps.run.outputs.wp == 'true'
+        run: bash ops/docker/build-base.sh
       - if: steps.run.outputs.wp == 'true'
         run: npx wp-env start
-      - if: steps.has.outputs.core == 'true'
-        run: npx wp-env run cli wp aralia setup --sample-catalog
+      - if: steps.run.outputs.wp == 'true' && steps.has.outputs.core == 'true'
+        # Entorno de PRUEBAS (tests-cli, puerto 8889): es el que usan PHPUnit, Playwright y el reloj simulado.
+        run: npx wp-env run tests-cli wp aralia setup --sample-catalog
 
       - name: PHPUnit de integración (WordPress real)
         if: steps.has.outputs.integration == 'true'
@@ -152,6 +156,13 @@ jobs:
       - name: Prueba de contrato del guard (D-01)
         if: steps.has.outputs.contract == 'true'
         run: npx wp-env run tests-cli --env-cwd=wp-content/aralia-repo vendor/bin/phpunit --testsuite contract
+
+      - name: Preparar el sitio de pruebas para los E2E
+        if: steps.has.outputs.e2e == 'true'
+        # PHPUnit reinstala WordPress en la base de datos de pruebas (el log dice «Installing...»): quita plugins activos y catálogo.
+        run: |
+          npx wp-env run tests-cli wp plugin activate woocommerce aralia-core wompi-portal-de-pagos wordfence
+          npx wp-env run tests-cli wp aralia setup --sample-catalog
 
       - if: steps.has.outputs.e2e == 'true'
         run: npx playwright install --with-deps chromium

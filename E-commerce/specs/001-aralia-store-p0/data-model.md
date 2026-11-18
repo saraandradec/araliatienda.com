@@ -140,7 +140,8 @@ Descuento al crear el pedido y devolución al cancelarlo, con vencimiento propio
 | `id` | bigint PK | |
 | `received_at` | datetime UTC | |
 | `source` | enum(`webhook`,`reconcile`,`widget_callback`,`return`,`expiry`) | |
-| `transaction_id` | varchar(64) | índice **único** con `status_received` (idempotencia); nulo si el evento no trae id válido |
+| `transaction_id` | varchar(64) | índice normal con `status_received`; nulo si el evento no trae id válido |
+| `idem_key` | varchar(100), nulo | **único**: `"<transaction_id>\|<estado verificado por la API>"`. Solo se llena cuando el checksum es válido y la API verificó el estado; un evento falso o diferido no la ocupa (así no bloquea al legítimo). Idempotencia según R-02 §2b |
 | `reference` | varchar(64) | |
 | `order_id` | bigint | índice |
 | `status_received` | enum(APPROVED, DECLINED, VOIDED, ERROR, PENDING) | |
@@ -149,7 +150,7 @@ Descuento al crear el pedido y devolución al cancelarlo, con vencimiento propio
 | `checksum_valid` | bool | |
 | `api_verified` | enum(`yes`,`no`,`deferred`,`n/a`) | verificación doble contra la API |
 | `amount_match`, `currency_match`, `reference_match` | bool | |
-| `raw_sanitized` | json | cuerpo sin datos de tarjeta (solo marca y últimos 4) |
+| `raw_sanitized` | longtext (JSON) | cuerpo sin datos de tarjeta (solo marca y últimos 4). `longtext` y no `json` por compatibilidad MySQL/MariaDB con dbDelta |
 | `action_taken` | varchar(64) | p. ej. `to_processing`, `blocked_regression`, `duplicate_ignored` |
 | Retención | 5 años | sin datos de tarjeta (solo marca y últimos 4 si llegan) |
 
@@ -163,10 +164,12 @@ Descuento al crear el pedido y devolución al cancelarlo, con vencimiento propio
 `id`, `subject_hash` (HMAC del correo; y `phone_hash`), `email_enc`, `phone_enc`, `consent_id`, `email_confirmed_at`, `phone_confirmed_at`, `created_at`, `brevo_synced_at`. Doble confirmación por correo; celular confirmado por código antes de cualquier SMS (R-12).
 
 ### `aralia_audit_log` — registro de actividad (R-3 del TM)
-`id`, `at`, `user_id`, `ip_hash`, `action` (login, login_failed, price_change, order_status_change, refund_logged, reversal_logged, role_change, user_created, plugin_change, settings_change, blocked_transition), `object_type`, `object_id`, `before`, `after`. Retención ≥ 1 año; exportación semanal cifrada fuera del sitio (8.15).
+`id`, `at`, `user_id`, `ip_hash`, `action` (login, login_failed, price_change, order_status_change, refund_logged, reversal_logged, role_change, user_created, plugin_change, settings_change, blocked_transition), `object_type`, `object_id`, `before_value`, `after_value` (longtext; `before`/`after` se renombraron por ser palabras delicadas en SQL; sin datos personales en `user_created`/`role_change`: redactar). `action` es `varchar(40)` validado en PHP. Retención ≥ 1 año; exportación semanal cifrada fuera del sitio (8.15).
 
 ### `aralia_rate_limits` — límites con incremento atómico (R-12)
 `key_hash` + `bucket` (PK compuesta), `count`, `window_start`. Escritura con `INSERT … ON DUPLICATE KEY UPDATE`. Purga de ventanas vencidas cada hora.
+
+**Notas de esquema (T021)**: `received_at` y todas las fechas en UTC; `contact_enc`/`email_enc` admiten NULL para anonimizar conservando la prueba de consentimiento; `early_access.subject_hash` es único (una fila por persona); índices de purga por fecha; con el modo SQL de WordPress los enums no rechazan valores inválidos (se guardan como ''), por eso la validación con lista blanca vive en PHP; `ip_hash` y `subject_hash` deben ser HMAC con clave (R-23), nunca SHA-256 sin clave.
 
 **Total: 6 tablas propias** (`payment_events`, `consents`, `stock_alerts`, `early_access`, `audit_log`, `rate_limits`). Cifrado con `ARALIA_PII_KEY` y `subject_hash` con HMAC (R-23).
 

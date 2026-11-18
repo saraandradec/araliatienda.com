@@ -86,7 +86,7 @@ Escala: Probabilidad (B/M/A) × Impacto (B/M/A). **Control** = requisito del spe
 | T-5 | XSS almacenado vía mensaje de regalo, nombre del neceser, indicaciones o campos de aviso, ejecutado en el panel de Sara | LC-1→LC-2 | M×A | FR-041 (lista blanca de caracteres), texto plano con escape en salida en panel, hoja de empaque y correos; longitud máxima por campo |
 | T-6 | CSV malicioso (fórmulas, scripts, tipos inválidos) altera precios o inyecta contenido | LC-7 | B×A | Importador con validación por columna, vista previa con diferencias de precio antes de aplicar, sanitización, solo administradora |
 | T-7 | Código de descuento forzado por fuerza bruta | LC-1 | M×M | Límite de intentos por origen y sesión; códigos largos no adivinables; vencimiento y usos máximos |
-| T-8 | Evento de pago repetido (replay) o fuera de orden cambia el estado | LC-3 | M×A | FR-054: idempotencia por id de transacción; máquina de estados que no retrocede de pagado sin revisión |
+| T-8 | Evento de pago repetido (replay) o fuera de orden cambia el estado | LC-3 | M×A | FR-054: idempotencia por `idem_key` = id de transacción + estado verificado por la API (solo con checksum válido; un evento falso no ocupa la clave); máquina de estados que no retrocede de pagado sin revisión |
 | T-9 | Actualización maliciosa o vulnerable de plugin/tema | LC-8 | M×A | Lista mínima de plugins de proveedores confiables; staging para actualizar; escáner de vulnerabilidades; edición de archivos desde el panel deshabilitada |
 
 ### R — Repudiation (repudio)

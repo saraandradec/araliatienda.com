@@ -35,16 +35,17 @@ Wompi ─ POST transaction.updated ─► ?wc-api=wc_wompi → guard (prioridad 
 Gracias: sin terceros; consulta /aralia/v1/order-status (no cambia estados)
 aralia_order_expiry (creación + 30 min): consulta Wompi por cada transaction_id conocido →
   APPROVED → paso 5–6 · PENDING → +15 min (tope 2 h) · resto o sin transacción → cancelled (restaura stock)
-Conciliación cada 5 min: pending y cancelled (≤ 24 h) con transaction_id sin estado final → paso 5–6
+Conciliación cada 5 min: pending y cancelled (≤ 24 h) con transaction_id cuyo estado verificado por la API no se refleja en el pedido → paso 5–6 (sin idem_key)
 ```
 
 ## 3. Verificación de un evento (guard)
 
 1. Estructura: `event`, `data.transaction.{id, reference, amount_in_cents, currency, status}`, `signature.{properties[], checksum}`, `timestamp`. Inválida → registro + `400`.
    **Registro saneado (lista blanca)**: solo se guardan en `raw_sanitized` `event`, `timestamp`, `data.transaction.{id, reference, amount_in_cents, currency, status, status_message, payment_method_type, created_at, finalized_at}` y `payment_method.extra.{brand, last_four}`. Se descartan `customer_email`, `customer_data`, `bin`, nombre del titular, `exp_*`, `shipping_address` y cualquier otro campo.
-2. **Checksum**: concatenar los valores de `signature.properties` (en orden) + `timestamp` + secreto de eventos → SHA256 → `hash_equals` con `signature.checksum` y con la cabecera `X-Event-Checksum` si viene. Inválido → registro (`checksum_valid=false`) + `401` + contador de alerta (R-22).
+2. **Checksum**: concatenar los valores de `signature.properties` (en orden) + `timestamp` + secreto de eventos → SHA256 (hex, **normalizado a minúsculas** antes de comparar: la documentación de Wompi lo muestra en mayúsculas) → `hash_equals` con `signature.checksum` y con la cabecera `X-Event-Checksum` si viene. Inválido → registro (`checksum_valid=false`) + `401` + contador de alerta (R-22).
 3. **Referencia**: debe cumplir `^\d+-\d{1,3}$`, el pedido debe existir, ser del gateway `wompi` y tener ese intento en `_ara_attempts`. Si no → registro + `200` (no reintentar) + alerta.
-4. **Idempotencia**: (`transaction_id`, estado verificado por la API) ya procesado → `200`, `action_taken=duplicate_ignored`. El `transaction_id` se guarda en `_ara_attempts` aunque el evento quede `deferred`.
+4. **Idempotencia** (atajo; la decisión final la toma la escritura de `idem_key` tras el paso 5): si ya existe una fila con `idem_key = "<transaction_id>|<estado>"` → `200`, `action_taken=duplicate_ignored`. El `transaction_id` se guarda en `_ara_attempts` aunque el evento quede `deferred`.
+   **Regla de `idem_key`** (`aralia_payment_events.idem_key`, único): solo se escribe DESPUÉS del paso 5, cuando el checksum es válido y la API confirmó el estado, con `UPDATE` de la fila registrada en el paso 1. Si el `UPDATE` choca con el índice único (dos entregas simultáneas) → `duplicate_ignored` sin cambiar el pedido. Orden: primero se ocupa `idem_key` y después se cambia el estado del pedido (así dos procesos no lo cambian dos veces); si el proceso cae entre ambos pasos, el reintento del webhook se descarta como duplicado y lo repara la conciliación (T063), que NO ocupa ni consulta `idem_key`: decide por el estado del pedido mediante la máquina de estados. Los eventos falsos o diferidos nunca llevan `idem_key`, así que no bloquean al legítimo.
 5. **Verificación doble**: `GET /v1/transactions/{id}` (llave según T-API-AUTH, timeout 8 s, TLS verificado). Debe coincidir: `status`, `amount_in_cents` = total del pedido × 100, `currency = COP`, `reference`. Si la API no responde → `api_verified=deferred`, `200`; la conciliación termina el trabajo. Si no coincide → sin cambio + alerta crítica.
 6. **Máquina de estados**: transición según `data-model.md` §3; bloqueadas → registro + alerta.
 7. Respuesta `200` en cualquier caso procesado o diferido.

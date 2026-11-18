@@ -64,11 +64,11 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
 
 ### Núcleo y datos
 
-- [ ] T020 Crear el bootstrap de `aralia-core` (autoloader propio PSR-4 `Aralia\\` sin Composer en producción, registro de servicios, comando WP-CLI `wp aralia`) en `core/aralia-core.php` y `core/src/Plugin.php`, y agregar `aralia-core` y el tema `aralia` a `.wp-env.json`
-- [ ] T162 [P] Implementar `wp aralia wompi replay <fixture.json>` (reproduce eventos firmados con el secreto de prueba) en `core/src/Cli/WompiReplayCommand.php`; lo usan T019 y el CI
-- [ ] T163 [P] Implementar el avance de reloj de Action Scheduler para pruebas (`wp action-scheduler run --hooks=aralia_order_expiry` con fecha simulada; T-PSE-ABANDON, T-HOLD-PENDING) en `tests/php/integration/ClockTest.php` y `tests/e2e/support/clock.ts`
-- [ ] T164 Implementar la bandera `--sample-catalog` de `wp aralia setup` (taxonomías, atributos y catálogo de ejemplo para local y CI) en `core/src/Cli/SetupCommand.php`
-- [ ] T165 Fijar la imagen base de Docker de wp-env en el CI (la `wordpress:php8.3` de Debian trixie falla en `apt install git` por falta del grupo `_ssh`; ver `ops/inventory.md`) antes de T020, en `.wp-env.json`/`.github/workflows/ecommerce-ci.yml`
+- [x] T020 Crear el bootstrap de `aralia-core` (autoloader propio PSR-4 `Aralia\\` sin Composer en producción, registro de servicios, comando WP-CLI `wp aralia`) en `wp-content/plugins/aralia-core/aralia-core.php` y `src/Plugin.php`, y agregar `aralia-core` y el tema `aralia` a `.wp-env.json`
+- [x] T162 [P] Implementar `wp aralia wompi replay <fixture.json>` (reproduce eventos firmados con el secreto de prueba) en `wp-content/plugins/aralia-core/src/Cli/WompiReplayCommand.php` (y `src/Wompi/ReplayBuilder.php`); lo usan T019 y el CI
+- [x] T163 [P] Implementar el avance de reloj de Action Scheduler para pruebas (`wp action-scheduler run --hooks=aralia_order_expiry` con fecha simulada; T-PSE-ABANDON, T-HOLD-PENDING) en `tests/php/integration/ClockTest.php`, `tests/php/Support/ActionSchedulerClock.php` y `tests/e2e/support/clock.ts`; el reloj de la tienda es `wp-content/plugins/aralia-core/src/Support/Clock.php` (solo local/test). **Regla**: Action Scheduler programa con la hora real (`time()`) y la lógica de la tienda compara con `Clock::now()`; el reloj de pruebas adelanta ambos. Los E2E deben llamar a `resetClock()` en `afterEach`
+- [ ] T164 (PARCIAL 2026-11-17: categorías, atributos pa_tono/pa_color y 4 productos de ejemplo hechos; faltan `aralia_seccion`, `aralia_paso`, marca, fotos y cross-sells, que llegan con T038/T039/T041) Implementar la bandera `--sample-catalog` de `wp aralia setup` (taxonomías, atributos y catálogo de ejemplo para local y CI) en `wp-content/plugins/aralia-core/src/Cli/SetupCommand.php`
+- [x] T165 Fijar la imagen base de Docker de wp-env en el CI (la `wordpress:php8.3` de Debian trixie falla en `apt install git` por falta del grupo `_ssh`; ver `ops/inventory.md`) antes de T020, en `.wp-env.json`/`.github/workflows/ecommerce-ci.yml`
 - [ ] T166 Condiciones de la primera salida a producción (decisiones de Sara): staging en una cuenta/usuario de Hostinger distinta de producción y GitHub Pro/Team con protección de `main`; `ops/deploy.sh` se niega a desplegar a producción sin ellas (salvo `ALLOW_SHARED_STAGING` / `ALLOW_UNPROTECTED_MAIN` en `deploy.conf`, aceptación escrita). Verificar antes de T160 en `ops/go-live-checklist.md` y `ops/compliance/accounts-2fa.md`
 - [ ] T167 Añadir al CI un paso de avisos de vulnerabilidades de WordPress para WooCommerce, Wompi, Wordfence y LiteSpeed (Wordfence Intelligence, Patchstack o WPScan), porque `composer audit` no cubre wpackagist, en `.github/workflows/ecommerce-ci.yml` y `ops/inventory.md`
 - [ ] T168 Política de actualizaciones de terceros en Hostinger: desactivar la actualización automática del plugin de Wompi (solo tras la prueba de contrato), copia previa con UpdraftPlus y prueba en staging antes de actualizar WooCommerce/Wordfence/LiteSpeed, y registro de la versión probada en `ops/inventory.md`; documentar en `ops/runbooks/patching.md` (junto con T149) y comprobarlo en `wp aralia baseline check`; tras actualizar un tercero en producción, desplegar de inmediato el commit con el `third-party.lock` nuevo (mueve el ancla del rollback); staging debe replicar la caché y los inyectables de producción (si no, la huella `tp=` nunca coincidirá); `ops/deploy.sh` ya compara el servidor con `ops/third-party.lock` antes de copiar (falla si Wompi tiene `auto_update` activo); desactivar también las actualizaciones automáticas en hPanel, que se saltan la opción de wp-admin
@@ -76,9 +76,9 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
 - [ ] T170 Fase 2: `aralia-wompi-guard` comprueba en ejecución la versión de Wompi contra una lista blanca y, si no coincide, apaga el medio de pago (falla cerrada); `wp aralia baseline check` exige `ARALIA_ENV=production` en producción y compara plugins/mu-plugins/versiones con `ops/third-party.lock` (depende de T032); el guard se carga desde `mu-plugins/aralia-wompi-guard.php` (WordPress no carga mu-plugins en subcarpetas): el fallo cerrado va en **tiempo de ejecución** en un mu-plugin propio (p. ej. `aralia-failsafe.php`, que no se puede desactivar desde wp-admin; `aralia-core` sí se puede) (si no está definida `ARALIA_WOMPI_GUARD_LOADED`, quitar Wompi de `woocommerce_available_payment_gateways` y cortar el endpoint de eventos del plugin oficial), con prueba de abuso; `baseline check` además lo verifica al desplegar
 - [ ] T172 Cerrar RR-15 al existir el servidor real (T012): añadir a `ops/third-party.lock` un sha256 por archivo para mu-plugins ajenos y drop-ins y por árbol para los temas (calculado en el servidor con `sha256sum`/`find`, sin PHP) y que `ops/deploy.sh` lo compare antes y después de copiar; decidir qué se hace con UpdraftPlus (`any`): huella fija o riesgo aceptado explícito
 - [ ] T171 Endurecimiento de `build/` y de wp-admin: `.htaccess` versionado en aralia-core que deniegue ejecutar `.php`/`.phtml`/`.phar` dentro de `build/`; los bloques dinámicos usan `render_callback` en `src/` (no `render.php` en `build/`); `revoked-shas.txt` local que `rollback` consulte; build reproducible verificado en el equipo de Sara (junto con T167)
-- [ ] T021 Crear las migraciones versionadas de las 6 tablas `aralia_*` con sus índices únicos (data-model §4) en `core/migrations/`
-- [ ] T022 [P] Escribir la prueba de migraciones e índices únicos en `tests/php/integration/MigrationsTest.php`
-- [ ] T023 Configurar WooCommerce con el comando `wp aralia setup`: COP, `woocommerce_price_num_decimals = 0`, stock gestionado, `woocommerce_hold_stock_minutes = 30`, HPOS con sincronización, checkout de bloques, compra como invitada, registro solo con rol cliente. En `core/src/Cli/SetupCommand.php`
+- [x] T021 Crear las migraciones versionadas de las 6 tablas `aralia_*` con sus índices únicos (data-model §4) en `wp-content/plugins/aralia-core/migrations/`
+- [x] T022 [P] Escribir la prueba de migraciones e índices únicos en `tests/php/integration/MigrationsTest.php`
+- [x] T023 Configurar WooCommerce con el comando `wp aralia setup`: COP, `woocommerce_price_num_decimals = 0`, stock gestionado, `woocommerce_hold_stock_minutes = 30`, HPOS con sincronización, checkout de bloques, compra como invitada, registro solo con rol cliente. En `wp-content/plugins/aralia-core/src/Cli/SetupCommand.php`
 
 ### Seguridad base
 
@@ -130,6 +130,7 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
   - PENDING: +15 min, con tope de 2 h.
   - Extensión única a +5 min al abrir el widget, hasta los 35 min.
   - Cancelación nativa desactivada para `wompi`.
+  - **Reglas de prueba (gate vuelta 3)**: el vencimiento es idempotente o usa un candado por pedido (en los tests `DISABLE_WP_CRON` es false y el ejecutor normal de Action Scheduler puede tomar las mismas acciones que el reloj simulado adelanta: no debe ejecutarse dos veces); programa con `time()` real y compara con `Clock::now()`.
 - [ ] T059 Implementar el cliente de la API de Wompi (`GET /v1/transactions/{id}`, timeout de 8 s, TLS verificado) en `guard/WompiClient.php`. Ejecutar **T-API-AUTH** en Sandbox y registrar la llave elegida en `specs/001-aralia-store-p0/research.md` R-02
 - [ ] T060 Implementar el manejador de eventos en `woocommerce_api_wc_wompi` con prioridad 1 (`exit` al final; contracts/wompi §3). En `guard/EventHandler.php`:
   - Registro saneado con lista blanca de campos.
@@ -139,6 +140,7 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
   - Verificación doble con la API.
   - Máquina de estados.
   - Guardar el `transaction_id` en `_ara_attempts` aunque el evento quede `deferred` (R-02 §2b).
+  - **`idem_key`** según contracts/wompi-integration.md §3 paso 4. Cualquier comprobación de frescura del `timestamp` del evento usa la hora REAL (`time()`), nunca `Clock::now()`: `EventSigner` firma con la hora real y los replays no deben parecer viejos al adelantar el reloj simulado.
 - [ ] T061 Implementar el order-pay propio en `guard/OrderPay.php` y `guard/assets/order-pay.js`:
   - Quitar la acción `woocommerce_receipt_wompi` del plugin.
   - Persistir `<id>-<n>` antes de renderizar y firmar en el servidor.
@@ -148,7 +150,7 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
   - Plan alterno a los 8 s si el widget no carga.
   - Callback del widget a `payment-attempt`.
 - [ ] T062 [P] Implementar `POST /aralia/v1/payment-attempt` y `POST /aralia/v1/order-status` (contracts/rest-api §8 y §8b) en `core/src/Rest/PaymentAttempt.php` y `core/src/Rest/OrderStatus.php`
-- [ ] T063 Implementar la conciliación cada 5 min (pedidos `pending` y `cancelled` de 24 h o menos; los aprobados de más de 24 h, con alerta) en `guard/Reconciler.php`
+- [ ] T063 Implementar la conciliación cada 5 min (**no ocupa ni consulta `idem_key`**: decide por el estado del pedido a través de la máquina de estados, que es idempotente porque `pending` pasa a `processing` una sola vez; así repara el caso de un proceso que cayó tras ocupar la clave y antes de cambiar el pedido; criterio: pedidos `pending` y `cancelled` de 24 h o menos con un `transaction_id` cuyo estado verificado por la API no se refleja en el pedido; los aprobados de más de 24 h, con alerta) en `guard/Reconciler.php`
 - [ ] T064 [P] Implementar la detección de doble cobro y escribir su runbook en `core/src/Orders/DoubleCharge.php` y `ops/runbooks/duplicate-charge.md`
 - [ ] T065 [P] Implementar `POST /aralia/v1/order-again` (pedidos `cancelled`, o `pending` tras un rechazo sin intento PENDING) en `core/src/Rest/OrderAgain.php`
 - [ ] T066 [P] Escribir la prueba de contrato de la superficie del plugin (hooks, opción, estado `wc-voided`, id del gateway, y grep de `payment_complete`/`update_status`/`set_status` fuera de los puntos de H13) en `tests/php/contract/WompiPluginSurfaceTest.php`

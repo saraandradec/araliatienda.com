@@ -10,6 +10,7 @@ parameters:
         - wp-content/plugins/aralia-core/build/*
     bootstrapFiles:
         - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+        - tools/phpstan-bootstrap.php
     scanDirectories:
         - wp-content/plugins/wompi-portal-de-pagos
     treatPhpDocTypesAsCertain: false

@@ -5,7 +5,8 @@
   "plugins": [
     "./wp-content/plugins/woocommerce",
     "./wp-content/plugins/wompi-portal-de-pagos",
-    "./wp-content/plugins/wordfence"
+    "./wp-content/plugins/wordfence",
+    "./wp-content/plugins/aralia-core"
   ],
   "themes": [],
   "mappings": {

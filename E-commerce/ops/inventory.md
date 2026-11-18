@@ -2,7 +2,7 @@
 
 Actualizar en cada cambio de versión. Criterios para aceptar un plugin o librería nuevos (SSDF PO.1.3): mantenido activamente, actualizado en los últimos 6 meses, sin vulnerabilidades abiertas conocidas, proveedor identificable y justificación escrita aquí.
 
-Última revisión: 2026-11-13.
+Última revisión: 2026-11-17.
 
 ## Núcleo y plugins de terceros
 
@@ -35,7 +35,11 @@ Actualizar en cada cambio de versión. Criterios para aceptar un plugin o librer
 
 **Avisos de `npm audit` aceptados (solo desarrollo)**: 13 avisos de severidad alta, todos en dependencias transitivas de `@wordpress/scripts`, `@wordpress/env` y `@lhci/cli`. Ninguna va a producción (no se despliega `node_modules/`). Mitigación: Dependabot semanal (`.github/dependabot.yml`) y revisión en cada actualización; si alguno afecta al CI (que ejecuta código del repositorio), subir el paquete o fijar `overrides`. Revisar de nuevo el 2026-12-13.
 
-**Entorno local (Docker)**: la imagen `wordpress:php8.3` (Debian trixie) falla en `apt install git` por falta del grupo `_ssh`; en local se parcha con una imagen base propia (`groupadd -r _ssh`) re-etiquetada. En CI conviene fijar la imagen o aplicar el mismo parche.
+**Entorno local (Docker)**: la imagen `wordpress:php8.3` (Debian trixie) falla en `apt install git` por falta del grupo `_ssh`; en local se parcha con una imagen base propia (`groupadd -r _ssh`) re-etiquetada. En local y en CI se aplica el mismo parche con `ops/docker/build-base.sh` (T165): construye `ops/docker/wordpress-php83.Dockerfile` (base `wordpress:php8.3` **fijada por digest**, más el grupo `_ssh`) y la etiqueta `wordpress:php8.3` para wp-env. Dependabot (ecosistema docker) propone el cambio de digest como PR revisado. En local el script sobrescribe la etiqueta de esa máquina.
+
+## Migraciones de aralia-core
+
+**Migraciones de aralia-core**: la migración `0001_tablas_base.php` quedó **congelada** el 2026-11-17 (antes de existir datos reales); cualquier cambio de esquema desde ahora va en `0002_*.php` o posteriores. Una base de desarrollo creada antes de esa fecha conserva el esquema viejo: `npx wp-env clean all` y volver a ejecutar `wp aralia setup`. (Deuda: nada en el CI hace cumplir la congelación; una verificación de hash de 0001 sería el siguiente paso.)
 
 ## Servicios externos (encargados / TPSP)
 

@@ -10,6 +10,8 @@
 	<exclude-pattern>*/vendor/*</exclude-pattern>
 	<exclude-pattern>*/node_modules/*</exclude-pattern>
 	<exclude-pattern>*/build/*</exclude-pattern>
+	<!-- Declaraciones de símbolos solo para PHPStan. -->
+	<exclude-pattern>tools/phpstan-bootstrap.php</exclude-pattern>
 
 	<arg name="extensions" value="php"/>
 	<arg name="colors"/>
@@ -23,6 +25,11 @@
 	<rule ref="WordPress.DB.PreparedSQL"/>
 	<rule ref="WordPress.DB.PreparedSQLPlaceholders"/>
 	<rule ref="PHPCompatibilityWP"/>
+
+	<!-- Migraciones numeradas (0001_nombre.php): el nombre lleva la versión. -->
+	<rule ref="WordPress.Files.FileName">
+		<exclude-pattern>*/aralia-core/migrations/*</exclude-pattern>
+	</rule>
 
 	<rule ref="WordPress.WP.I18n">
 		<properties>
