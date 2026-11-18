@@ -156,9 +156,11 @@ final class AbuseLimitsTest extends SecurityTestCase {
 			$order->save();
 			$orders[] = $order;
 		}
-		$done = wc_create_order( array( 'status' => 'processing' ) );
+		$done = wc_create_order( array( 'status' => 'pending' ) );
 		$done->update_meta_data( '_ara_phone_hash', $meta['_ara_phone_hash'] );
 		$done->save();
+		\Aralia\Tests\Support\OrderStates::walk( $done, 'processing' ); // Un pedido ya no puede nacer pagado.
+
 		try {
 			$this->assertSame( 3, $limits->count_pending_orders( 'phone', $meta['_ara_phone_hash'] ), 'Solo cuentan los pendientes de ESA huella (no los de otra persona ni los ya pagados)' );
 			$this->assertSame( 3, $limits->count_pending_orders( 'email', $meta['_ara_email_hash'] ) );

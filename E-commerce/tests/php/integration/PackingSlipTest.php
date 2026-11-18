@@ -9,6 +9,7 @@ namespace Aralia\Tests\Integration;
 
 use Aralia\Orders\PackingSlip;
 use Aralia\Tests\Support\IsolatedTestCase;
+use Aralia\Tests\Support\OrderStates;
 
 /**
  * Acceso protegido (permiso, nonce, 404) y datos reales del pedido.
@@ -85,17 +86,13 @@ final class PackingSlipTest extends IsolatedTestCase {
 
 	public function test_the_order_list_gets_a_signed_button_only_for_managers_and_for_paid_orders(): void {
 		$order = $this->order();
-		$order->set_status( 'processing' );
-		$order->save();
 		wp_set_current_user( $this->user( 'administrator' ) );
+		$this->assertArrayNotHasKey( 'aralia_packing_slip', PackingSlip::order_action( array(), $order ), 'Un pedido sin pagar no se empaca' );
+		OrderStates::walk( $order, 'processing' );
 		$actions = PackingSlip::order_action( array(), $order );
 		$this->assertArrayHasKey( 'aralia_packing_slip', $actions );
 		$this->assertStringContainsString( '_wpnonce=', $actions['aralia_packing_slip']['url'] );
-		$order->set_status( 'pending' );
-		$order->save();
-		$this->assertArrayNotHasKey( 'aralia_packing_slip', PackingSlip::order_action( array(), $order ), 'Un pedido sin pagar no se empaca' );
 		wp_set_current_user( $this->user( 'customer' ) );
-		$order->set_status( 'processing' );
 		$this->assertArrayNotHasKey( 'aralia_packing_slip', PackingSlip::order_action( array(), $order ) );
 		$order->delete( true );
 	}
@@ -123,8 +120,7 @@ final class PackingSlipTest extends IsolatedTestCase {
 	public function test_refunded_quantities_are_not_packed_and_completed_orders_can_be_reprinted(): void {
 		$order = $this->order();
 		$order->calculate_totals();
-		$order->set_status( 'completed' );
-		$order->save();
+		OrderStates::walk( $order, 'processing', 'ara-packed', 'ara-shipped', 'completed' );
 		$item = array_values( $order->get_items() )[0];
 		$refund = wc_create_refund( array( 'order_id' => $order->get_id(), 'amount' => 10000, 'line_items' => array( $item->get_id() => array( 'qty' => 1, 'refund_total' => 10000 ) ) ) );
 		$this->assertNotInstanceOf( \WP_Error::class, $refund, 'Premisa: el reembolso se creó' );

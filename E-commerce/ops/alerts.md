@@ -5,7 +5,7 @@ Destinataria: Sara. Fuente: `aralia-core` (clase `Aralia\Security\Alerts`) y Wor
 | Evento (`id`) | Umbral | Severidad | Quién lo levanta |
 |---|---|---|---|
 | `nostock` | cada pedido en `ara-nostock` | Crítico | Orders (T053/T056) |
-| `blocked_transition` | cada una | Crítico | StateMachine (T054) |
+| `blocked_transition` | una por hora (agregada) | Crítico | StateMachine (T054) |
 | `checksum_invalid` | > 5 por hora | Crítico | Guard (T060) |
 | `payment_declines` | > 20 por hora en toda la tienda | Crítico | Guard / AbuseLimits |
 | `deferred_unresolved` | evento diferido sin resolver > 15 min | Crítico | Conciliación (T063; T060 solo marca el evento como diferido) |

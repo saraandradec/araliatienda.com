@@ -30,11 +30,11 @@ class Alerts {
 	public static function matrix(): array {
 		return array(
 			'nostock'             => array( self::CRITICAL, null, 0, 'Pedido pagado con productos sin stock (ara-nostock)' ),
-			'blocked_transition'  => array( self::CRITICAL, null, 0, 'Transición de estado de pedido bloqueada' ),
+			'blocked_transition'  => array( self::CRITICAL, 0, HOUR_IN_SECONDS, 'Transición de estado de pedido bloqueada' ),
 			'checksum_invalid'    => array( self::CRITICAL, 5, HOUR_IN_SECONDS, 'Más de 5 eventos de Wompi con checksum inválido en una hora' ),
 			'payment_declines'    => array( self::CRITICAL, 20, HOUR_IN_SECONDS, 'Más de 20 pagos rechazados en una hora' ),
 			'deferred_unresolved' => array( self::CRITICAL, null, 0, 'Evento de pago diferido sin resolver por más de 15 minutos' ),
-			'expiry_late'         => array( self::CRITICAL, null, 0, 'El vencimiento de pedidos (aralia_order_expiry) lleva más de 5 minutos atrasado' ),
+			'expiry_late'         => array( self::CRITICAL, 0, HOUR_IN_SECONDS, 'El vencimiento de pedidos (aralia_order_expiry) lleva más de 5 minutos atrasado' ),
 			'script_critical'     => array( self::CRITICAL, null, 0, 'Nuevo <script src>, cambio de widget.js o de las cabeceras de seguridad' ),
 			'script_inline'       => array( self::NOTICE, null, 0, 'Cambio en un script inline normalizado (revisar en 48 h)' ),
 			'admin_role_change'   => array( self::CRITICAL, null, 0, 'Administrador creado, degradado o borrado, o cambio de rol, correo o contraseña de un administrador' ),

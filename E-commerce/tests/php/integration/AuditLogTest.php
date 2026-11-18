@@ -115,9 +115,7 @@ final class AuditLogTest extends SecurityTestCase {
 		$product->delete( true );
 
 		$order = wc_create_order();
-		$order->set_status( 'on-hold' );
-		$order->save();
-		$order->update_status( 'processing' );
+		\Aralia\Tests\Support\OrderStates::walk( $order, 'processing' );
 		$this->assertNotEmpty( $this->rows( 'order_status_change' ) );
 
 		do_action( 'aralia_blocked_transition', $order->get_id(), 'processing', 'pending' );

@@ -130,6 +130,19 @@ final class Plugin {
 		// Las alertas de identidad (admin_role_change) se entregan ya, sin cola: quien tenga una sesión robada podría borrar la acción pendiente.
 		$alerts = new \Aralia\Security\Alerts( $limiter, $crypto, new \Aralia\Notifications\BrevoClient( null, null, $limiter, $crypto ) );
 		$alerts->register();
+		// Canal único para levantar alertas desde el código de pedidos y pagos: do_action( 'aralia_alert', evento, referencia ).
+		add_action(
+			'aralia_alert',
+			static function ( $event, $ref = '' ) use ( $alerts ): void {
+				$alerts->raise( (string) $event, (string) $ref );
+			},
+			10,
+			2
+		);
+		\Aralia\Orders\Statuses::register();
+		\Aralia\Orders\StateMachine::register();
+		\Aralia\Orders\StockOnCreate::register( static fn() => $crypto ? new \Aralia\Security\AbuseLimits( $limiter, $crypto ) : null );
+		\Aralia\Orders\Expiry::register();
 		( new \Aralia\Security\AuditLog( $crypto, $limiter, static fn( string $event, string $ref ) => $alerts->raise( $event, $ref, 'admin_role_change' === $event ) ) )->register_hooks();
 	}
 
