@@ -11,9 +11,8 @@
 namespace Aralia\Tests\Support;
 
 use Aralia\Database\Migrator;
-use Yoast\PHPUnitPolyfills\TestCases\TestCase;
 
-abstract class DatabaseTestCase extends TestCase {
+abstract class DatabaseTestCase extends IsolatedTestCase {
 
 	/**
 	 * Borra las tablas aralia_* y el estado de migración.

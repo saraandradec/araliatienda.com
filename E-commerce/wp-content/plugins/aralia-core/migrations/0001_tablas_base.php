@@ -18,6 +18,8 @@ return array(
 		'payment_events' => array( 'uq_idem' => array( 'idem_key' ) ),
 		'stock_alerts'   => array( 'uq_alert' => array( 'product_id', 'variation_id', 'subject_hash' ) ),
 		'early_access'   => array( 'uq_subject' => array( 'subject_hash' ) ),
+		// Todo el diseño atómico del limitador depende de esta clave primaria (sin ella el ON DUPLICATE KEY degenera en INSERT simple).
+		'rate_limits'    => array( 'PRIMARY' => array( 'key_hash', 'bucket' ) ),
 	),
 	'up'      => static function ( \wpdb $wpdb ): void {
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';

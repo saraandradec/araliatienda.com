@@ -21,6 +21,13 @@ if ( ! defined( 'WP_TESTS_PHPUNIT_POLYFILLS_PATH' ) ) {
 if ( ! defined( 'ARALIA_ENV' ) ) {
 	define( 'ARALIA_ENV', 'test' );
 }
+// Llaves de privacidad SOLO de pruebas, generadas al vuelo (no son literales): 32 bytes cada una y distintas.
+if ( ! defined( 'ARALIA_PII_KEY' ) ) {
+	define( 'ARALIA_PII_KEY', base64_encode( str_repeat( 'p', 32 ) ) );
+}
+if ( ! defined( 'ARALIA_HMAC_KEY' ) ) {
+	define( 'ARALIA_HMAC_KEY', base64_encode( str_repeat( 'h', 32 ) ) );
+}
 
 require_once $aralia_wp_tests_dir . '/includes/functions.php';
 
@@ -30,6 +37,10 @@ tests_add_filter(
 		$plugins = dirname( __DIR__, 2 ) . '/wp-content/plugins';
 		require_once $plugins . '/woocommerce/woocommerce.php';
 		require_once $plugins . '/aralia-core/aralia-core.php';
+		// En wp-env el mu-plugin ya se carga desde wp-content/mu-plugins (mapeo): no se declara dos veces.
+		if ( ! function_exists( 'aralia_hardening_env' ) ) {
+			require_once dirname( __DIR__, 2 ) . '/wp-content/mu-plugins/aralia-hardening.php';
+		}
 	}
 );
 

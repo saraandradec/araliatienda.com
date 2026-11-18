@@ -90,7 +90,36 @@ final class Plugin {
 
 		// El despliegue copia archivos (no activa el plugin): las migraciones también se aplican al cargar.
 		add_action( 'plugins_loaded', array( $this, 'maybe_migrate' ), 5 );
+		add_action( 'init', array( $this, 'register_security' ), 1 );
 		add_action( 'cli_init', array( $this, 'register_cli' ) );
+	}
+
+	/**
+	 * Engancha la seguridad base (cabeceras, auditoría, CSP, Turnstile, caché y alertas).
+	 *
+	 * @return void
+	 */
+	public function register_security(): void {
+		\Aralia\Security\Headers::register();
+		\Aralia\Security\Csp::register();
+		\Aralia\Cache\PaymentPages::register();
+		( new \Aralia\Cache\CacheInvalidator() )->register();
+		( new \Aralia\Support\Maintenance() )->register();
+		( new \Aralia\Security\Turnstile() )->register();
+
+		// Las alertas se registran SIEMPRE (aunque falten las llaves de privacidad): una acción encolada sin manejador se marcaría como hecha.
+		$limiter = new \Aralia\Security\RateLimiter();
+		try {
+			$crypto = \Aralia\Privacy\Crypto::from_constants();
+		} catch ( \RuntimeException $e ) {
+			// Sin llaves de privacidad no hay huellas ni SMS con tope: `wp aralia baseline check` lo marca (privacy_keys).
+			unset( $e );
+			$crypto = null;
+		}
+		// Las alertas de identidad (admin_role_change) se entregan ya, sin cola: quien tenga una sesión robada podría borrar la acción pendiente.
+		$alerts = new \Aralia\Security\Alerts( $limiter, $crypto, new \Aralia\Notifications\BrevoClient( null, null, $limiter, $crypto ) );
+		$alerts->register();
+		( new \Aralia\Security\AuditLog( $crypto, $limiter, static fn( string $event, string $ref ) => $alerts->raise( $event, $ref, 'admin_role_change' === $event ) ) )->register_hooks();
 	}
 
 	/**
@@ -151,6 +180,7 @@ final class Plugin {
 		}
 		\WP_CLI::add_command( 'aralia', \Aralia\Cli\RootCommand::class );
 		\WP_CLI::add_command( 'aralia setup', \Aralia\Cli\SetupCommand::class );
+		\WP_CLI::add_command( 'aralia baseline', \Aralia\Cli\BaselineCommand::class );
 		// Herramientas de prueba: no se registran en producción ni sin ARALIA_ENV (defensa adicional a la comprobación del comando).
 		if ( \Aralia\Support\Environment::allows_replay() ) {
 			\WP_CLI::add_command( 'aralia wompi replay', \Aralia\Cli\WompiReplayCommand::class );

@@ -46,5 +46,17 @@ define( 'ARALIA_GA4_SERVICE_ACCOUNT_JSON', '' ); // R (JSON en una línea)
 
 // Datos personales (R-23): libsodium secretbox (32 bytes en base64) y llave HMAC para subject_hash.
 // Generar con: php -r "echo base64_encode(random_bytes(32)), PHP_EOL;"
+// Alertas (R-22): obligatorias fuera de local/test (no se toman de opciones editables desde wp-admin). Remitente de los correos: del dominio verificado (SPF/DKIM/DMARC).
+define( 'ARALIA_ALERT_EMAIL', '' ); // R
+define( 'ARALIA_ALERT_PHONE', '' ); // R (móvil colombiano)
+define( 'ARALIA_MAIL_FROM', '' );   // I
+// IPs o CIDR (separados por comas) de los proxies de confianza delante del sitio (Hostinger/CDN); vacío = no se confía en X-Forwarded-For.
+// DESCOMENTAR tras verificar en staging (T012): sin esta constante `wp aralia baseline check` falla (trusted_proxies).
+// define( 'ARALIA_TRUSTED_PROXIES', '' ); // I
+// Marca de salida a producción (T160): desde ahí la línea base exige la CSP en enforce.
+// define( 'ARALIA_GO_LIVE', true ); // I
+
+// Llaves de privacidad: base64 de 32 bytes aleatorios, DISTINTAS entre sí (`php -r 'echo base64_encode(random_bytes(32)), PHP_EOL;'`).
+// Sin ellas `wp aralia baseline check` falla (privacy_keys) y no hay huellas, consentimientos ni alertas por SMS.
 define( 'ARALIA_PII_KEY', '' );  // R
 define( 'ARALIA_HMAC_KEY', '' ); // R

@@ -8,9 +8,9 @@
 namespace Aralia\Tests\Integration;
 
 use Aralia\Setup\StoreConfig;
-use Yoast\PHPUnitPolyfills\TestCases\TestCase;
+use Aralia\Tests\Support\IsolatedTestCase;
 
-final class StoreConfigTest extends TestCase {
+final class StoreConfigTest extends IsolatedTestCase {
 
 	/**
 	 * Opciones que toca `apply()` (se restauran después de cada prueba).

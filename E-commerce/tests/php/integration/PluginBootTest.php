@@ -8,9 +8,9 @@
 namespace Aralia\Tests\Integration;
 
 use Aralia\Plugin;
-use Yoast\PHPUnitPolyfills\TestCases\TestCase;
+use Aralia\Tests\Support\IsolatedTestCase;
 
-final class PluginBootTest extends TestCase {
+final class PluginBootTest extends IsolatedTestCase {
 
 	public function test_plugin_is_loaded_with_constants(): void {
 		$this->assertTrue( defined( 'ARALIA_CORE_VERSION' ) );
@@ -107,5 +107,56 @@ final class PluginBootTest extends TestCase {
 		$this->assertTrue( class_exists( \Aralia\Cli\SetupCommand::class ) );
 		$this->assertTrue( class_exists( \Aralia\Cli\WompiReplayCommand::class ) );
 		$this->assertNotFalse( has_action( 'cli_init', array( Plugin::instance(), 'register_cli' ) ), 'Los comandos se registran en cli_init' );
+	}
+
+	/**
+	 * Busca en $wp_filter un callback de `$hook` cuyo objeto (o clase estática) sea de la clase dada.
+	 */
+	private function hook_has_callback_of( string $hook, string $class, ?string $method = null ): bool {
+		global $wp_filter;
+		if ( ! isset( $wp_filter[ $hook ] ) ) {
+			return false;
+		}
+		foreach ( $wp_filter[ $hook ]->callbacks as $callbacks ) {
+			foreach ( $callbacks as $cb ) {
+				$fn = $cb['function'];
+				if ( is_array( $fn ) && ( $fn[0] instanceof $class || $fn[0] === $class ) && ( null === $method || $fn[1] === $method ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Si se borra una línea de Plugin::register_security, este test falla: las demás pruebas construyen su propia instancia y no lo detectarían.
+	 *
+	 * @dataProvider provide_security_wiring
+	 */
+	public function test_register_security_wires_every_control_into_the_real_request_lifecycle( string $hook, string $class, ?string $method ): void {
+		$this->assertTrue( $this->hook_has_callback_of( $hook, $class, $method ), "$class::$method no está enganchado a '$hook' por Plugin::register_security" );
+	}
+
+	/**
+	 * @return array<string,array{string,string,?string}>
+	 */
+	public static function provide_security_wiring(): array {
+		return array(
+			'cabeceras'              => array( 'wp_headers', \Aralia\Security\Headers::class, 'filter_headers' ),
+			'csp'                    => array( 'template_redirect', \Aralia\Security\Csp::class, 'start' ),
+			'csp nonce'              => array( 'wp_script_attributes', \Aralia\Security\Csp::class, 'add_nonce_attribute' ),
+			'csp inline'             => array( 'wp_inline_script_attributes', \Aralia\Security\Csp::class, 'on_inline_script' ),
+			'no-cache de pago'       => array( 'template_redirect', \Aralia\Cache\PaymentPages::class, 'on_template_redirect' ),
+			'caché: producto'        => array( 'woocommerce_update_product', \Aralia\Cache\CacheInvalidator::class, 'on_product_changed' ),
+			'caché: fin de petición' => array( 'shutdown', \Aralia\Cache\CacheInvalidator::class, 'on_shutdown' ),
+			'caché: etiquetas'       => array( 'wp', \Aralia\Cache\CacheInvalidator::class, 'on_wp' ),
+			'mantenimiento horario'  => array( \Aralia\Support\Maintenance::HOURLY, \Aralia\Support\Maintenance::class, 'on_hourly' ),
+			'mantenimiento diario'   => array( \Aralia\Support\Maintenance::DAILY, \Aralia\Support\Maintenance::class, 'on_daily' ),
+			'turnstile: bloques'     => array( 'woocommerce_store_api_checkout_update_order_from_request', \Aralia\Security\Turnstile::class, 'on_checkout' ),
+			'turnstile: clásico'     => array( 'woocommerce_after_checkout_validation', \Aralia\Security\Turnstile::class, 'on_classic_checkout' ),
+			'alertas: entrega'       => array( 'aralia_deliver_alert', \Aralia\Security\Alerts::class, 'on_deliver_action' ),
+			'auditoría: login'       => array( 'wp_login', \Aralia\Security\AuditLog::class, 'on_login' ),
+			'auditoría: roles'       => array( 'set_user_role', \Aralia\Security\AuditLog::class, 'on_set_user_role' ),
+		);
 	}
 }

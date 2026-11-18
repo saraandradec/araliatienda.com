@@ -9,9 +9,9 @@ namespace Aralia\Tests\Integration;
 
 use Aralia\Wompi\EventSigner;
 use Aralia\Wompi\ReplayBuilder;
-use Yoast\PHPUnitPolyfills\TestCases\TestCase;
+use Aralia\Tests\Support\IsolatedTestCase;
 
-final class ReplayBuilderTest extends TestCase {
+final class ReplayBuilderTest extends IsolatedTestCase {
 
 	private const SECRET = 'test_events_secret';
 	private const HOME   = 'http://localhost:8889/';

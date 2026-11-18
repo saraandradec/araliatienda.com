@@ -9,9 +9,9 @@ namespace Aralia\Tests\Integration;
 
 use Aralia\Support\Clock;
 use Aralia\Tests\Support\ActionSchedulerClock;
-use Yoast\PHPUnitPolyfills\TestCases\TestCase;
+use Aralia\Tests\Support\IsolatedTestCase;
 
-final class ClockTest extends TestCase {
+final class ClockTest extends IsolatedTestCase {
 
 	private int $ran = 0;
 

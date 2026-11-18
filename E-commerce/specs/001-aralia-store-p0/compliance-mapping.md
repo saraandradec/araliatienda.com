@@ -247,3 +247,5 @@ Las tablas §1–§6 reflejan el estado **antes** del plan. Este cuadro indica c
 | Ley 1581: aviso de incidentes a la SIC | Huérfano | Cubierto | FR-083b, R-19 |
 | Ley 1480: reversión del pago | Parcial | Cubierto | FR-058a, data-model §3 |
 | Pendientes legales (contratos de transmisión, RNBD, Ley 2300, efecto de "Entregado" automático sobre el retracto) | Parcial | Dependencia del abogado antes de la fase 5 | R-19 |
+
+> **Nota de estado (2026-11-17)**: las filas marcadas «Cubierto» describen la cobertura POR DISEÑO. Los controles anti-abuso (`AbuseLimits`) y las alertas (`Alerts::raise`, salvo `admin_role_change`) están implementados y probados pero NO cableados a los flujos hasta T056, T058, T060/T061, T086 y T089: ver RR-17 en el threat model. No leerlos como controles activos.

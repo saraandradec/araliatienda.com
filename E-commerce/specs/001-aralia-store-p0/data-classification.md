@@ -31,7 +31,7 @@
 | Prueba de consentimiento (texto, versión, fecha, canal, IP) | C | Sí | No | Registro de consentimientos | Mientras dure el tratamiento + 5 años | FR-075 |
 | Tono guardado | P/I | No (en el dispositivo, sin identificar) | No | Almacenamiento local del navegador | 12 meses | FR-081 |
 | Carrito persistente | I | No en el navegador; sí si se asocia a cuenta | No | Navegador / cuenta | 30 días | FR-045 |
-| IP, agente de usuario y huella anti-bots | C | Sí (indirecta) | No | Registros de seguridad | 90 días | Finalidad: seguridad y antifraude |
+| IP, agente de usuario y huella anti-bots | C | Sí (indirecta) | No | Registros de seguridad y de actividad | La **huella de IP** se borra a los 90 días; la **fila** del registro de actividad se conserva 1 año (TM R-3) | Finalidad: seguridad y antifraude |
 | Registro de eventos de pago (`raw_sanitized` con lista blanca: sin correo, nombre, teléfono, BIN ni titular) | C | Indirecta | Metadato | `aralia_payment_events` | 5 años | R-1, evidencia de disputas; contracts/wompi §3 |
 | Intentos de pago (`_ara_attempts`: referencia, id de transacción, estado) | C | Indirecta | Metadato | Pedido | Igual que el pedido | |
 | `client_id` de GA4, `fbp`/`fbc` en el pedido | C (seudónimo) | Sí | No | Pedido | 90 días | Solo con consentimiento de analítica (R-14) |

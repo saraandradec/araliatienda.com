@@ -11,6 +11,7 @@ npm ci
 
 # 2. Secretos de Sandbox (carpeta ignorada por git; wp-env la monta en wp-content/aralia-private/)
 mkdir -p .wp-env-private && cp ops/templates/aralia-secrets.sample.php .wp-env-private/aralia-secrets.php
+#   → generar ARALIA_PII_KEY y ARALIA_HMAC_KEY (distintas): php -r 'echo base64_encode(random_bytes(32)), PHP_EOL;'
 #   → completar ARALIA_WOMPI_*_TEST, TURNSTILE_* de prueba, BREVO_* de prueba
 
 # 3. Entorno

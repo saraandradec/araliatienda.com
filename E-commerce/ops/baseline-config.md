@@ -35,6 +35,12 @@ Estado: ☐ pendiente · ☑ verificado (fecha, quién).
 | W7 | Wordfence | WAF activo, 2FA para la administradora, escáner programado, alertas a Sara | ☐ |
 | W8 | LiteSpeed | Exclusiones y optimización JS desactivada en páginas de pago según `ops/cache-policy.md` | ☐ |
 
+### Verificación automática y configuración manual de Wordfence (T032)
+
+`wp aralia baseline check` (staging y producción, tras cada despliegue) comprueba (ids: `env_defined`, `env_matches_host`, `no_admin_user`, `file_edit_disabled`, `file_mods_allowed`, `xmlrpc_disabled`, `app_passwords_disabled`, `users_endpoint_hidden`, `security_headers`, `headers_registered`, `headers_real`, `hsts_https`, `csp_mode`, `csp_enforce`, `trusted_proxies`, `turnstile_secret`, `brevo_key`, `alert_destinations`, `uploads_no_php`, `debug_off`, `secrets_loaded`, `privacy_keys`, `store_config`, `db_current`, `wordfence_active`). Notas: en producción las cabeceras se leen de la respuesta REAL de la home; `csp_enforce` solo se exige desde el go-live (`ARALIA_GO_LIVE`, T160) para no impedir despliegues durante el inventario de la CSP (T150); `trusted_proxies` exige que `ARALIA_TRUSTED_PROXIES` esté definida (vacía solo tras verificar en staging que `REMOTE_ADDR` ya es la IP real). Comprobaciones: variable `ARALIA_ENV` válida; sin usuario `admin`; `DISALLOW_FILE_EDIT` activo (y `DISALLOW_FILE_MODS` NO); XML-RPC apagado; `/wp/v2/users` oculto a visitantes; cabeceras de seguridad (HSTS, nosniff, Referrer-Policy, Permissions-Policy, `frame-ancestors 'self'`) y que estén enganchadas; sitio por HTTPS; `uploads/` sin ejecución de PHP; `WP_DEBUG` apagado; secretos cargados; llaves de privacidad válidas; configuración de la tienda conforme (`StoreConfig`); base de datos al día y sin errores de migración; Wordfence activo. En local y test las reglas de producción se marcan «omitido».
+
+**Lo que NO se puede verificar desde el código y debe hacer Sara en staging/producción** (marcar en la tabla de arriba, W7): WAF de Wordfence en modo «Enabled and Protecting», 2FA de la administradora, escáner programado (malware y vulnerabilidades) y alertas por correo/SMS a Sara. Hasta que estén hechos, T032 queda parcial.
+
 ## 3. Correo (T018)
 
 | # | Requisito | Valor | Estado |

@@ -8,9 +8,9 @@
 namespace Aralia\Tests\Integration;
 
 use Aralia\Setup\SampleCatalog;
-use Yoast\PHPUnitPolyfills\TestCases\TestCase;
+use Aralia\Tests\Support\IsolatedTestCase;
 
-final class SampleCatalogTest extends TestCase {
+final class SampleCatalogTest extends IsolatedTestCase {
 
 	private function purge(): void {
 		$ids = get_posts(

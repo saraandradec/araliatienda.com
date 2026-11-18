@@ -75,3 +75,7 @@ Este runbook despliega **solo el código propio**: el plugin `aralia-core`, el t
 ## Lo que el script nunca toca
 
 `.htaccess`, `.user.ini`, `wordfence-waf.php`, `.well-known`, `wp-config.php`, `uploads/`, `wflogs`, caché de LiteSpeed, idiomas, `updraft` y UpdraftPlus. UpdraftPlus Premium se instala y actualiza a mano.
+
+## ARALIA_ENV en producción
+
+`ARALIA_ENV=local` o `test` copiado por error a producción relaja el endurecimiento, habilita `http` para el propio host en la CSP, las herramientas de prueba (replay de eventos, catálogo de ejemplo, reloj simulado) y el salto de Turnstile sin llave. `wp aralia baseline check` lo detecta (`env_matches_host`: falla si el host no es de desarrollo), pero antes de cada despliegue a producción confirma a mano que `ARALIA_ENV` valga exactamente `production`.
