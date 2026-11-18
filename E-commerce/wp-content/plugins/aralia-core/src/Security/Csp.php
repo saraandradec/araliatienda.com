@@ -109,7 +109,7 @@ class Csp {
 	public static function nonce_handle_patterns(): array {
 		return (array) apply_filters(
 			'aralia_csp_nonce_handles',
-			array( '/^aralia-/', '/^wc-/', '/^woocommerce/', '/^wp-/', '/^@wordpress\//', '/^@woocommerce\//', '/^react/', '/^jquery/', '/^lodash$/', '/^moment$/', '/^wompi/', '/^turnstile/', '/^sourcebuster/', '/^js-cookie$/' )
+			array( '/^aralia-(?!gsap|scrolltrigger|motion)/', '/^wc-/', '/^woocommerce/', '/^wp-/', '/^@wordpress\//', '/^@woocommerce\//', '/^react/', '/^jquery/', '/^lodash$/', '/^moment$/', '/^wompi/', '/^turnstile/', '/^sourcebuster/', '/^js-cookie$/' )
 		);
 	}
 

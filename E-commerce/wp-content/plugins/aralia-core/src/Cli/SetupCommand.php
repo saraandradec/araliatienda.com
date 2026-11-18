@@ -30,6 +30,9 @@ class SetupCommand {
 	 * [--dry-run]
 	 * : Muestra qué cambiaría sin aplicarlo.
 	 *
+	 * [--allow-provisional-shipping]
+	 * : Crea el envío PROVISIONAL de prueba también fuera de local y test (en producción nunca debería hacerse).
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp aralia setup
@@ -43,6 +46,7 @@ class SetupCommand {
 		unset( $args );
 		$dry    = \WP_CLI\Utils\get_flag_value( $assoc_args, 'dry-run', false );
 		$sample = \WP_CLI\Utils\get_flag_value( $assoc_args, 'sample-catalog', false );
+		$prov   = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'allow-provisional-shipping', false );
 
 		if ( ! class_exists( 'WooCommerce' ) ) {
 			\WP_CLI::error( 'WooCommerce no está activo.' );
@@ -58,6 +62,8 @@ class SetupCommand {
 			if ( ! StoreConfig::hpos_switch_is_safe() ) {
 				\WP_CLI::warning( 'HPOS no se cambiaría: ya hay pedidos (migra con `wp wc hpos enable`).' );
 			}
+			\WP_CLI::log( \Aralia\Setup\ProvisionalShipping::may_apply( $prov ) ? 'Se crearía la zona de envío provisional (tarifa plana de prueba; se reemplaza en US1).' : 'NO se crearía el envío provisional (entorno ' . Environment::current() . ' sin --allow-provisional-shipping).' );
+			\WP_CLI::log( 'Tema: ' . ( \Aralia\Setup\ThemeActivation::SLUG === get_stylesheet() ? 'aralia ya activo.' : 'se activaría aralia.' ) );
 			\WP_CLI::success( 'Simulación: no se cambió nada.' );
 			return;
 		}
@@ -80,6 +86,16 @@ class SetupCommand {
 		if ( StoreConfig::diff() ) {
 			\WP_CLI::error( 'La configuración no quedó como se esperaba.' );
 		}
+
+		$shipping = \Aralia\Setup\ProvisionalShipping::maybe_apply( $prov );
+		if ( null === $shipping ) {
+			\WP_CLI::warning( 'Envío provisional OMITIDO en el entorno ' . Environment::current() . ' (solo local y test; usa --allow-provisional-shipping bajo tu responsabilidad).' );
+		} elseif ( '' !== $shipping['conflict'] ) {
+			\WP_CLI::warning( 'Ya hay una zona que cubre Colombia («' . $shipping['conflict'] . '»): no se creó la provisional porque quedaría tapada.' );
+		} else {
+			\WP_CLI::log( $shipping['created_method'] ? 'Envío provisional de tarifa plana creado (se reemplaza en US1).' : 'Envío provisional ya configurado.' );
+		}
+		\WP_CLI::log( 'Tema: ' . \Aralia\Setup\ThemeActivation::apply() . '.' );
 
 		if ( $sample ) {
 			$created = ( new SampleCatalog() )->install();

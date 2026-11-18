@@ -83,6 +83,8 @@ class Baseline {
 		$go_live = (bool) ( $overrides['go_live'] ?? ( defined( 'ARALIA_GO_LIVE' ) && constant( 'ARALIA_GO_LIVE' ) ) );
 		$add( 'csp_enforce', 'production' !== $env || ! $go_live || 'enforce' === $mode, ( 'production' === $env && $go_live ) ? 'CSP en enforce (go-live)' : 'omitido hasta el go-live (ARALIA_GO_LIVE, T160)' );
 
+		$provisional = (bool) ( $overrides['provisional_shipping'] ?? ( '1' === get_option( 'aralia_provisional_shipping' ) ) );
+		$add( 'provisional_shipping', ! $strict || ! $provisional, $strict ? 'el envío provisional de prueba no debe estar activo en ' . $env : 'omitido en ' . $env );
 		// Detrás de un balanceador o CDN, sin proxies de confianza declarados todas las clientas comparten una IP (los límites por IP serían globales).
 		$proxies_defined = (bool) ( $overrides['trusted_proxies_defined'] ?? defined( 'ARALIA_TRUSTED_PROXIES' ) );
 		// Una entrada descartada (máscara demasiado amplia o ilegible) deja a las clientas con la IP del proxy: falla en vez de pasar en silencio.

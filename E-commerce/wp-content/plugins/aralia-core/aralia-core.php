@@ -18,6 +18,7 @@ defined( 'ABSPATH' ) || exit;
 define( 'ARALIA_CORE_VERSION', '0.1.0' );
 define( 'ARALIA_CORE_FILE', __FILE__ );
 define( 'ARALIA_CORE_DIR', plugin_dir_path( __FILE__ ) );
+define( 'ARALIA_CORE_URL', plugin_dir_url( __FILE__ ) );
 
 /**
  * Autoloader PSR-4 de Aralia\. Solo resuelve nombres bien formados dentro de src/.

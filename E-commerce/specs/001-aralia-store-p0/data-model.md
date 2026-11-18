@@ -79,6 +79,7 @@ Atributo `pa_tipo_bolsa`; stock por variación; contenido nunca expuesto (descri
 | `_ara_vinyl_color` | uno de la lista configurada |
 | `_ara_neceser_size` | uno de la lista configurada (P0: 1) |
 | `_ara_group_id` | agrupa el neceser y sus piezas (≤ 6 líneas de piezas) |
+| `_ara_group_label` | nombre legible del grupo en la hoja de empaque (set o neceser); lo escribe quien crea el grupo (US4/US5) y lo lee `PackingSlip` |
 | `_ara_no_return_ack` | true obligatorio antes de pagar (FR-042) |
 
 ---

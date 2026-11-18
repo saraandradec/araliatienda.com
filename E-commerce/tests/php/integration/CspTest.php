@@ -503,4 +503,21 @@ final class CspTest extends IsolatedTestCase {
 		$this->assertCount( 1, $sent );
 		$this->assertStringStartsWith( 'Content-Security-Policy-Report-Only: ', $sent[0] );
 	}
+
+	public function test_theme_motion_handles_never_get_a_nonce_but_other_aralia_handles_do(): void {
+		$patterns = \Aralia\Security\Csp::nonce_handle_patterns();
+		$allowed  = static function ( string $handle ) use ( $patterns ): bool {
+			foreach ( $patterns as $pattern ) {
+				if ( 1 === preg_match( $pattern, $handle ) ) {
+					return true;
+				}
+			}
+			return false;
+		};
+		foreach ( array( 'aralia-gsap', 'aralia-scrolltrigger', 'aralia-motion' ) as $handle ) {
+			$this->assertFalse( $allowed( $handle ), "$handle no recibe nonce: en checkout, order-pay y Gracias no puede autorizarse aunque se encolara por error" );
+		}
+		$this->assertTrue( $allowed( 'aralia-checkout' ), 'Otros handles propios sí (p. ej. los scripts del pago)' );
+		$this->assertTrue( $allowed( 'aralia-order-status' ) );
+	}
 }

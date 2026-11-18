@@ -1,0 +1,2 @@
+/* Icono del botón «Hoja de empaque» en el listado de pedidos (WooCommerce pinta los botones de acción con ::after). */
+.wc-action-button-aralia-packing-slip::after { font-family: Dashicons; content: "\f193"; }

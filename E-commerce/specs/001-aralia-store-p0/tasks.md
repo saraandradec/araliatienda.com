@@ -124,9 +124,18 @@ description: "Tareas de implementación — Aralía Beauty Store P0"
 
 ### Tema base
 
-- [ ] T047 Crear el tema de bloques: `theme.json` con los tokens claro y oscuro (champagne oscurecido para texto sobre crema), Cormorant Garamond y Jost auto-alojadas, plantillas base, encabezado, pie y cajón móvil con Categorías y Secciones (FR-001); GSAP auto-alojado solo en páginas públicas que lo usan, con `prefers-reduced-motion` y nunca en checkout, order-pay ni Gracias (R-04). En `theme/`
-- [ ] T048 Crear la hoja de empaque base imprimible (piezas, tonos, cantidades, agrupación por `_ara_group_id`, datos de envío) en `core/src/Orders/PackingSlip.php`; US4 y US5 la extienden
-- [ ] T049 Configurar el checkout provisional de la puerta de la fase 1: checkout de bloques nativo con un envío de tarifa plana temporal y la página Gracias nativa conectada a `order-status`. Se reemplaza en US1 (T089–T091)
+- [X] T047 Crear el tema de bloques: `theme.json` con los tokens claro y oscuro (champagne oscurecido para texto sobre crema), Cormorant Garamond y Jost auto-alojadas, plantillas base, encabezado, pie y cajón móvil con Categorías y Secciones (FR-001); GSAP auto-alojado solo en páginas públicas que lo usan, con `prefers-reduced-motion` y nunca en checkout, order-pay ni Gracias (R-04). En `theme/`
+- [X] T048 Crear la hoja de empaque base imprimible (piezas, tonos, cantidades, agrupación por `_ara_group_id`, datos de envío) en `core/src/Orders/PackingSlip.php`; US4 y US5 la extienden
+- [ ] T049 (PARCIAL 2026-11-18: checkout de bloques nativo verificado y envío de tarifa plana provisional creado por `wp aralia setup` (`Setup/ProvisionalShipping`, zona «Colombia (provisional)», 10.000 COP de prueba, marcado con la opción `aralia_provisional_shipping`) y probado; FALTA conectar la página Gracias nativa a `order-status`, que depende de T062; hasta entonces Gracias muestra solo el estado nativo de WooCommerce) Configurar el checkout provisional de la puerta de la fase 1: checkout de bloques nativo con un envío de tarifa plana temporal y la página Gracias nativa conectada a `order-status`. Se reemplaza en US1 (T089–T091)
+
+> **Dependencias de T049**: T049 → **T062** (`order-status`) para conectar Gracias; **T069 queda bloqueada** hasta entonces; la conexión definitiva y su script (que debe ir en la lista blanca de nonce de `Csp.php`: Gracias no admite terceros) es **T091**, para no construirla dos veces.
+>
+> **Deuda declarada del bloque F (Fase 2)**:
+> - **Cajón móvil**: además de Categorías y Secciones muestra Regalos y Cómo llega (FR-001 dice «dos bloques»; a confirmar con Sara). Con colores de marca (ciruela y crema).
+> - **Tema**: los enlaces del menú son absolutos y no funcionan si el sitio vive en un subdirectorio; enlaces de menú a `/product-category/<slug>/`, `/secciones/<slug>/`, `/regalos/`, `/como-llega/` son provisionales (las páginas y la base de enlaces permanentes los fijan T0xx de US2 y US3). Sin patrones (`patterns/`) ni plantillas de producto propias todavía: usa las nativas de WooCommerce.
+> - **Activos del tema**: `ops/third-party.lock` aún no lista las fuentes ni GSAP (están en `theme/assets/ASSETS.md` con SHA-256); incorporarlos en T150/T170.
+> - **Hoja de empaque**: base sin sets ni neceser reales (los agrupa por `_ara_group_id` cuando exista); US4 y US5 la extienden.
+> - **Envío provisional**: 10.000 COP es un valor de prueba, no la tarifa comercial; lo reemplaza T089 a T091.
 
 ### Camino de pago (guard + pedidos)
 

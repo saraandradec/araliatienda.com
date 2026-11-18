@@ -51,3 +51,8 @@ npx lhci autorun          # Lighthouse
 **Staging / producción**: despliegue **local** con `~/.aralia-deploy/bin/deploy.sh staging|production <sha>` (lanzador de confianza, fuera del repo) desde el equipo de Sara (no por GitHub Actions; ver research R-15). Requiere `brew install rsync gh`, `~/.aralia-deploy/deploy.conf` (modo 600) y un CI en verde sobre `main`. Procedimiento completo en `ops/runbooks/deploy.md`.
 
 **Nota Docker (macOS/arm64)**: si `npx wp-env start` falla en `apt-get install git` con `chgrp: invalid group '_ssh'`, ver `ops/inventory.md` (Entorno local).
+
+
+## Tema `aralia`
+
+`wp aralia setup` activa el tema `aralia` (idempotente) y, solo en local y test, crea el envío provisional de prueba (`--allow-provisional-shipping` lo fuerza en otros entornos; en producción `wp aralia baseline check` falla mientras siga activo). `.wp-env.json` monta el tema pero no lo activa por sí solo.

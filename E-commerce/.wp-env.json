@@ -8,7 +8,9 @@
     "./wp-content/plugins/wordfence",
     "./wp-content/plugins/aralia-core"
   ],
-  "themes": [],
+  "themes": [
+    "./wp-content/themes/aralia"
+  ],
   "mappings": {
     "wp-content/mu-plugins": "./wp-content/mu-plugins",
     "wp-content/aralia-private": "./.wp-env-private"

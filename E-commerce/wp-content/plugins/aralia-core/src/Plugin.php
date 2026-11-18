@@ -106,6 +106,8 @@ final class Plugin {
 		\Aralia\Cache\PaymentPages::register();
 		( new \Aralia\Cache\CacheInvalidator() )->register();
 		\Aralia\Catalog\ProductMeta::register();
+		\Aralia\Orders\PackingSlip::register();
+		\Aralia\Setup\ProvisionalShipping::register();
 		\Aralia\Catalog\PublishRule::register();
 		if ( is_admin() ) {
 			\Aralia\Admin\IncompleteCatalog::register();

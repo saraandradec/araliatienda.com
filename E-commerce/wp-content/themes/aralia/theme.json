@@ -1,0 +1,256 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/theme.json",
+	"version": 3,
+	"settings": {
+		"appearanceTools": true,
+		"layout": {
+			"contentSize": "720px",
+			"wideSize": "1200px"
+		},
+		"color": {
+			"defaultPalette": false,
+			"defaultGradients": false,
+			"palette": [
+				{
+					"slug": "plum",
+					"name": "Ciruela",
+					"color": "#5D2044"
+				},
+				{
+					"slug": "plum-deep",
+					"name": "Ciruela profundo",
+					"color": "#3A0F28"
+				},
+				{
+					"slug": "cream",
+					"name": "Crema",
+					"color": "#F3F7EF"
+				},
+				{
+					"slug": "rose",
+					"name": "Rosa empolvado",
+					"color": "#E2B4C4"
+				},
+				{
+					"slug": "champagne",
+					"name": "Champagne (decorativo)",
+					"color": "#C8A46A"
+				},
+				{
+					"slug": "champagne-ink",
+					"name": "Champagne oscurecido (texto sobre crema)",
+					"color": "#7A5A1E"
+				}
+			],
+			"gradients": [
+				{
+					"slug": "plum-radial",
+					"name": "Ciruela radial",
+					"gradient": "radial-gradient(circle at center, #5D2044 0%, #3A0F28 100%)"
+				}
+			]
+		},
+		"typography": {
+			"fluid": true,
+			"fontFamilies": [
+				{
+					"slug": "cormorant",
+					"name": "Cormorant Garamond",
+					"fontFamily": "'Cormorant Garamond', Georgia, 'Times New Roman', serif",
+					"fontFace": [
+						{
+							"fontFamily": "Cormorant Garamond",
+							"fontStyle": "normal",
+							"fontWeight": "300",
+							"fontDisplay": "swap",
+							"src": [
+								"file:./assets/fonts/cormorant-garamond-latin-300-normal.woff2"
+							]
+						},
+						{
+							"fontFamily": "Cormorant Garamond",
+							"fontStyle": "italic",
+							"fontWeight": "300",
+							"fontDisplay": "swap",
+							"src": [
+								"file:./assets/fonts/cormorant-garamond-latin-300-italic.woff2"
+							]
+						},
+						{
+							"fontFamily": "Cormorant Garamond",
+							"fontStyle": "italic",
+							"fontWeight": "400",
+							"fontDisplay": "swap",
+							"src": [
+								"file:./assets/fonts/cormorant-garamond-latin-400-italic.woff2"
+							]
+						},
+						{
+							"fontFamily": "Cormorant Garamond",
+							"fontStyle": "normal",
+							"fontWeight": "500",
+							"fontDisplay": "swap",
+							"src": [
+								"file:./assets/fonts/cormorant-garamond-latin-500-normal.woff2"
+							]
+						},
+						{
+							"fontFamily": "Cormorant Garamond",
+							"fontStyle": "italic",
+							"fontWeight": "500",
+							"fontDisplay": "swap",
+							"src": [
+								"file:./assets/fonts/cormorant-garamond-latin-500-italic.woff2"
+							]
+						}
+					]
+				},
+				{
+					"slug": "jost",
+					"name": "Jost",
+					"fontFamily": "'Jost', system-ui, -apple-system, 'Segoe UI', sans-serif",
+					"fontFace": [
+						{
+							"fontFamily": "Jost",
+							"fontStyle": "normal",
+							"fontWeight": "300",
+							"fontDisplay": "swap",
+							"src": [
+								"file:./assets/fonts/jost-latin-300-normal.woff2"
+							]
+						},
+						{
+							"fontFamily": "Jost",
+							"fontStyle": "normal",
+							"fontWeight": "400",
+							"fontDisplay": "swap",
+							"src": [
+								"file:./assets/fonts/jost-latin-400-normal.woff2"
+							]
+						},
+						{
+							"fontFamily": "Jost",
+							"fontStyle": "normal",
+							"fontWeight": "500",
+							"fontDisplay": "swap",
+							"src": [
+								"file:./assets/fonts/jost-latin-500-normal.woff2"
+							]
+						}
+					]
+				}
+			],
+			"fontSizes": [
+				{
+					"slug": "small",
+					"name": "Pequeña",
+					"size": "0.875rem"
+				},
+				{
+					"slug": "base",
+					"name": "Base",
+					"size": "1rem"
+				},
+				{
+					"slug": "large",
+					"name": "Grande",
+					"size": "1.25rem",
+					"fluid": {
+						"min": "1.125rem",
+						"max": "1.375rem"
+					}
+				},
+				{
+					"slug": "x-large",
+					"name": "Muy grande",
+					"size": "2.125rem",
+					"fluid": {
+						"min": "1.75rem",
+						"max": "3.5rem"
+					}
+				}
+			]
+		},
+		"spacing": {
+			"units": [
+				"px",
+				"rem",
+				"%",
+				"vw"
+			]
+		}
+	},
+	"styles": {
+		"color": {
+			"background": "var(--wp--preset--color--cream)",
+			"text": "var(--wp--preset--color--plum-deep)"
+		},
+		"typography": {
+			"fontFamily": "var(--wp--preset--font-family--jost)",
+			"fontSize": "var(--wp--preset--font-size--base)",
+			"fontWeight": "400",
+			"lineHeight": "1.6"
+		},
+		"elements": {
+			"link": {
+				"color": {
+					"text": "var(--wp--preset--color--plum)"
+				},
+				":hover": {
+					"color": {
+						"text": "var(--wp--preset--color--plum-deep)"
+					}
+				}
+			},
+			"heading": {
+				"typography": {
+					"fontFamily": "var(--wp--preset--font-family--cormorant)",
+					"fontWeight": "500",
+					"lineHeight": "1.1"
+				}
+			},
+			"button": {
+				"color": {
+					"background": "var(--wp--preset--color--plum)",
+					"text": "var(--wp--preset--color--cream)"
+				},
+				"typography": {
+					"fontFamily": "var(--wp--preset--font-family--jost)",
+					"fontWeight": "500",
+					"letterSpacing": "0.08em",
+					"textTransform": "uppercase"
+				},
+				":hover": {
+					"color": {
+						"background": "var(--wp--preset--color--plum-deep)",
+						"text": "var(--wp--preset--color--cream)"
+					}
+				},
+				"border": {
+					"radius": "999px"
+				},
+				"spacing": {
+					"padding": {
+						"top": "0.75em",
+						"bottom": "0.75em",
+						"left": "1.75em",
+						"right": "1.75em"
+					}
+				}
+			}
+		},
+		"css": ".ara-header{position:sticky;top:var(--wp-admin--admin-bar--height,0px);z-index:20;background-color:var(--wp--preset--color--cream)}.wp-block-template-part:has(> .ara-header){position:sticky;top:var(--wp-admin--admin-bar--height,0px);z-index:20}.ara-header,.ara-header a{color:var(--wp--preset--color--plum-deep)}.is-style-outline .wp-block-button__link,.wp-block-button.is-style-outline>.wp-block-button__link{background:transparent;color:var(--wp--preset--color--plum);border:1px solid currentColor}"
+	},
+	"templateParts": [
+		{
+			"name": "header",
+			"title": "Encabezado",
+			"area": "header"
+		},
+		{
+			"name": "footer",
+			"title": "Pie",
+			"area": "footer"
+		}
+	]
+}
