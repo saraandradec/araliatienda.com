@@ -47,15 +47,15 @@ final class AlertsTest extends SecurityTestCase {
 
 	public function test_the_matrix_matches_r_22(): void {
 		$m = Alerts::matrix();
-		foreach ( array( 'nostock', 'blocked_transition', 'checksum_invalid', 'payment_declines', 'deferred_unresolved', 'expiry_late', 'script_critical', 'admin_role_change', 'vulnerability' ) as $critical ) {
+		foreach ( array( 'nostock', 'blocked_transition', 'checksum_invalid', 'payment_declines', 'deferred_unresolved', 'expiry_late', 'script_critical', 'admin_role_change', 'vulnerability', 'payment_mismatch', 'duplicate_charge', 'payment_voided' ) as $critical ) {
 			$this->assertSame( Alerts::CRITICAL, $m[ $critical ][0], $critical );
 		}
-		foreach ( array( 'script_inline', 'new_device_login', 'backup_failed', 'low_stock' ) as $notice ) {
+		foreach ( array( 'script_inline', 'new_device_login', 'backup_failed', 'low_stock', 'late_payment' ) as $notice ) {
 			$this->assertSame( Alerts::NOTICE, $m[ $notice ][0], $notice );
 		}
 		$this->assertSame( 5, $m['checksum_invalid'][1] );
 		$this->assertSame( 20, $m['payment_declines'][1] );
-		$this->assertCount( 13, $m );
+		$this->assertCount( 17, $m );
 	}
 
 	public function test_a_critical_alert_sends_email_and_sms_and_is_audited(): void {

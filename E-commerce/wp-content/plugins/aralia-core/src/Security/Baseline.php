@@ -85,6 +85,9 @@ class Baseline {
 
 		$provisional = (bool) ( $overrides['provisional_shipping'] ?? ( '1' === get_option( 'aralia_provisional_shipping' ) ) );
 		$add( 'provisional_shipping', ! $strict || ! $provisional, $strict ? 'el envío provisional de prueba no debe estar activo en ' . $env : 'omitido en ' . $env );
+		// T-KEYS / SC-015: ninguna llave de Wompi guardada en la base de datos (el guard las toma de constantes y las vacía al guardar).
+		$keys_in_db = (array) ( $overrides['wompi_keys_in_db'] ?? ( class_exists( '\\Aralia\\Guard\\Keys' ) ? \Aralia\Guard\Keys::stored_key_fields() : array() ) );
+		$add( 'wompi_keys_in_db', array() === $keys_in_db, array() === $keys_in_db ? 'sin llaves de Wompi en la base de datos' : 'llaves de Wompi guardadas en la base de datos: ' . implode( ', ', $keys_in_db ) . ' (se vacían al entrar a wp-admin; rotarlas)' );
 		// Detrás de un balanceador o CDN, sin proxies de confianza declarados todas las clientas comparten una IP (los límites por IP serían globales).
 		$proxies_defined = (bool) ( $overrides['trusted_proxies_defined'] ?? defined( 'ARALIA_TRUSTED_PROXIES' ) );
 		// Una entrada descartada (máscara demasiado amplia o ilegible) deja a las clientas con la IP del proxy: falla en vez de pasar en silencio.

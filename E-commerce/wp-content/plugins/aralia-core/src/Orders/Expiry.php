@@ -292,7 +292,7 @@ final class Expiry {
 	 * @param int $order_id Pedido.
 	 * @return bool
 	 */
-	private static function lock( int $order_id ): bool {
+	public static function lock( int $order_id ): bool {
 		global $wpdb;
 		$key   = 'aralia_exp_lock_' . $order_id;
 		$token = time() . ':' . wp_generate_password( 12, false );
@@ -320,7 +320,7 @@ final class Expiry {
 	 * @param int $order_id Pedido.
 	 * @return void
 	 */
-	private static function unlock( int $order_id ): void {
+	public static function unlock( int $order_id ): void {
 		global $wpdb;
 		$key = 'aralia_exp_lock_' . $order_id;
 		if ( isset( self::$tokens[ $order_id ] ) ) {

@@ -10,6 +10,10 @@ Destinataria: Sara. Fuente: `aralia-core` (clase `Aralia\Security\Alerts`) y Wor
 | `payment_declines` | > 20 por hora en toda la tienda | Crítico | Guard / AbuseLimits |
 | `deferred_unresolved` | evento diferido sin resolver > 15 min | Crítico | Conciliación (T063; T060 solo marca el evento como diferido) |
 | `expiry_late` | `aralia_order_expiry` atrasada > 5 min | Crítico | Vigilancia de Action Scheduler (T058: cablear `Alerts::raise( 'expiry_late' )`) |
+| `payment_mismatch` | cada evento cuyo monto, moneda, referencia o estado no coincide con el pedido o con la API de Wompi, o con referencia desconocida | Crítico | Guard (T060, **cableado**) |
+| `duplicate_charge` | otro intento APPROVED sobre un pedido ya pagado (posible doble cobro; runbook `duplicate-charge`, T064) | Crítico | Guard (T060, **cableado**) |
+| `payment_voided` | evento VOIDED verificado sobre un pedido pagado | Crítico | Guard (T060, **cableado**) |
+| `late_payment` | pago aprobado tardío en un pedido cancelado de más de 24 h | Aviso | Guard (T060, **cableado**) |
 | `script_critical` | nuevo `<script src>`, cambio de `widget.js` o de las cabeceras de seguridad | Crítico | `tools/script-monitor` |
 | `script_inline` | cambio en un script inline normalizado | Aviso (revisar en 48 h) | `tools/script-monitor` |
 | `admin_role_change` | administrador creado, o cambio de rol, de correo o de contraseña (incluido «olvidé mi contraseña» y `wp_set_password`), o borrado, de un administrador; también al DEGRADAR a uno (`set_role`, `remove_role`), cuando las capacidades se escriben como metadato y CONCEDEN privilegios (`add_cap`, `update_user_meta`; se evalúan las claves como lo hace WordPress, aunque el valor sea `false`), cuando un rol gana una capacidad privilegiada en la opción `{prefijo}user_roles` y cuando cambia el rol administrador. Capacidades privilegiadas: `manage_options`, `promote_users`, `edit_users`, `create_users`, `delete_users`, `install_plugins`, `activate_plugins`, `edit_plugins`, `update_plugins`, `unfiltered_html`, `update_core`. El nombre de la clave del metadato y de la opción de roles se compara sin distinguir mayúsculas ni espacios finales (la colación de MySQL los trata como iguales). También alerta borrar la opción de roles o quitar el rol administrador de la definición. NO alerta al QUITAR privilegios por metadato ni ante escrituras directas con `$wpdb` (RR-18). Una sola alerta por usuario y petición (la marca vive lo que viva la instancia: en una ejecución larga de WP-CLI o Action Scheduler un segundo evento sobre el mismo administrador no vuelve a alertar). Un restablecimiento de contraseña deja dos filas `user_changed` (`wp_set_password` y `after_password_reset`) y una sola alerta | Crítico | AuditLog (**cableado**: salta al crear un usuario administrador o cambiar a uno) |
@@ -28,7 +32,7 @@ Destinataria: Sara. Fuente: `aralia-core` (clase `Aralia\Security\Alerts`) y Wor
 
 ## Estado del cableado
 
-Solo `admin_role_change` está conectado hoy (AuditLog). Los demás eventos los levantarán las tareas de su flujo: `nostock` (T053/T056), `blocked_transition` (T054), `checksum_invalid` y `deferred_unresolved` (T063), `payment_declines` (T060/AbuseLimits), `expiry_late` (T058), `script_*` (T138), `low_stock` (T094), copias (T149). Hasta entonces, **no hay alerta** para ellos.
+Conectados hoy: `admin_role_change` (AuditLog), `blocked_transition`, `nostock`, `expiry_late` y `deferred_unresolved` (Orders, T053–T058) y `checksum_invalid`, `payment_mismatch`, `duplicate_charge`, `payment_voided`, `late_payment` y `payment_declines` (guard, T060). Los demás eventos los levantarán las tareas de su flujo: `deferred_unresolved` también desde la conciliación (T063), `script_*` (T138), `low_stock` (T094), copias (T149). Hasta entonces, **no hay alerta** para ellos.
 
 ## Entrega y destinos
 

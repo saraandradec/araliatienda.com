@@ -29,6 +29,17 @@ if ( ! defined( 'ARALIA_HMAC_KEY' ) ) {
 	define( 'ARALIA_HMAC_KEY', base64_encode( str_repeat( 'h', 32 ) ) );
 }
 
+// Llaves de Wompi SOLO de pruebas (no son literales ni credenciales reales).
+foreach ( array( 'PUB' => 'pub_test_', 'PRV' => 'prv_test_', 'EVENTS' => 'test_events_', 'INTEGRITY' => 'test_integrity_' ) as $aralia_kind => $aralia_prefix ) {
+	if ( ! defined( 'ARALIA_WOMPI_' . $aralia_kind . '_TEST' ) ) {
+		define( 'ARALIA_WOMPI_' . $aralia_kind . '_TEST', $aralia_prefix . str_repeat( 'x', 24 ) );
+	}
+}
+
+if ( ! defined( 'ARALIA_WOMPI_MODE' ) ) {
+	define( 'ARALIA_WOMPI_MODE', 'test' );
+}
+
 require_once $aralia_wp_tests_dir . '/includes/functions.php';
 
 tests_add_filter(
@@ -40,6 +51,9 @@ tests_add_filter(
 		// En wp-env el mu-plugin ya se carga desde wp-content/mu-plugins (mapeo): no se declara dos veces.
 		if ( ! function_exists( 'aralia_hardening_env' ) ) {
 			require_once dirname( __DIR__, 2 ) . '/wp-content/mu-plugins/aralia-hardening.php';
+		}
+		if ( ! class_exists( '\\Aralia\\Guard\\Guard', false ) ) {
+			require_once dirname( __DIR__, 2 ) . '/wp-content/mu-plugins/aralia-wompi-guard.php';
 		}
 	}
 );

@@ -107,9 +107,11 @@ class Maintenance {
 		global $wpdb;
 		$audit = new AuditLog();
 		$out   = array(
-			'audit_purged'   => $audit->purge_older_than( 365 ),
-			'audit_ip_wiped' => $audit->anonymize_ip_older_than( 90 ),
-			'alerts_purged'  => 0,
+			'audit_purged'                          => $audit->purge_older_than( 365 ),
+			'audit_ip_wiped'                        => $audit->anonymize_ip_older_than( 90 ),
+			'alerts_purged'                         => 0,
+			// Eventos de pago NO autenticados (checksum inválido): 30 días; los autenticados se conservan 5 años (FR-054).
+			'payment_events_unauthenticated_purged' => class_exists( '\\Aralia\\Guard\\PaymentEvents' ) ? \Aralia\Guard\PaymentEvents::purge_unauthenticated( 30 ) : 0,
 		);
 		$table = Migrator::tables()['stock_alerts'];
 		for ( $i = 0; $i < 20; $i++ ) {

@@ -28,7 +28,7 @@ return array(
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- DDL con prefijo y charset internos.
 		$statements = array(
-			// Registro de TODOS los eventos de pago (también falsos, diferidos, de conciliación). La idempotencia NO es (transaction_id,
+			// Registro de los eventos de pago AUTENTICADOS (checksum válido; también diferidos, de conciliación; un duplicado ya terminado no deja fila) y, con tope por hora y sin cuerpo, de los rechazados. La idempotencia NO es (transaction_id,
 			// status_received) sino idem_key: solo se llena cuando el checksum es válido y la API verificó el estado ("tx|estado verificado").
 			// Así un evento falso con un transaction_id real no ocupa la clave del evento legítimo. received_at siempre en UTC.
 			"CREATE TABLE {$p}payment_events (

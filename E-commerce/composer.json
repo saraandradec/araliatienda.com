@@ -34,7 +34,8 @@
   },
   "autoload": {
     "psr-4": {
-      "Aralia\\": "wp-content/plugins/aralia-core/src/"
+      "Aralia\\": "wp-content/plugins/aralia-core/src/",
+      "Aralia\\Guard\\": "wp-content/mu-plugins/aralia-wompi-guard/"
     }
   },
   "autoload-dev": {
