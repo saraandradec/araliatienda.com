@@ -1,0 +1,12 @@
+# Raíz del repo (landing + E-commerce/; E-commerce/ tiene su propio .gitignore)
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+.env
+.env.*
+*.pem
+*.key
+aralia-secrets*.php
+wp-config.php

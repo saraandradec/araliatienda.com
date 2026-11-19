@@ -1,0 +1,5 @@
+sku,parent_sku,nombre,categoria,subcategoria,marca,depende_tono,tono,subtono,color,look,secciones,paso_full_face,combina_con,costo,precio,stock,foto,foto_uso,swatch,registro_sanitario,descripcion_corta,como_se_usa,ingredientes
+LAB-001,,Labial Rosa,Labios,Labial,Marca A,no,,,rosas,natural,,labios,CEJ-001|LAB-002,8000,20000,10,labial.png,,swatch.png,INVIMA 123,,,
+LAB-002,,Gloss Brillo,Labios,Gloss,Marca A,no,,,nudes,clásico,,,LAB-001|CEJ-001,5000,15000,0,,,,,,,
+CEJ-001,,Lápiz de cejas,Cejas,Lápiz,Marca B,si,,,nudes,natural,,cejas,LAB-001|LAB-002,,,,cejas.png,,,,,,
+CEJ-001-MIE,CEJ-001,Lápiz de cejas Miel,Cejas,Lápiz,Marca B,si,Miel,cálido,nudes,natural,,,,4000,18000,6,,,swatch.png,,,,

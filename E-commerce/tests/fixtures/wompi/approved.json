@@ -1,0 +1,14 @@
+{
+  "event": "transaction.updated",
+  "data": {
+    "transaction": {
+      "id": "TEST-0001-1",
+      "reference": "1234-1",
+      "amount_in_cents": 3500000,
+      "currency": "COP",
+      "status": "APPROVED",
+      "payment_method_type": "CARD"
+    }
+  },
+  "environment": "test"
+}

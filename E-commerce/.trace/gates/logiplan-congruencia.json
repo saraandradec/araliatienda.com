@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-11-03T23:59:00-05:00",
+  "tier": "T0",
+  "feature": "specs/001-aralia-store-p0",
+  "stage": "logiplan:congruencia",
+  "gates": {
+    "logicraft-trace:architect": "pass (CONGRUENCIA TOTAL CONFIRMADA)"
+  },
+  "iterations": 2,
+  "signed_off_by": "",
+  "notes": "Pasada 1: incongruencias C-01..C-08 (3 medias). Pasada 2: confirmada. Ningún gate omitido."
+}

@@ -1,0 +1,7 @@
+{
+  "tier": "T0",
+  "reason": "Tienda WooCommerce que cobra dinero real vía pasarela Wompi (tarjeta, PSE, Nequi, Botón Bancolombia). Aunque los datos de tarjeta no tocan el servidor (redirección / widget de Wompi, alcance PCI DSS SAQ A), el sitio está en alcance PCI: integridad de la página de pago, verificación de firmas de eventos/webhooks, custodia de llaves privadas y de integridad. Además maneja PII de clientas y destinatarias de regalo (Ley 1581 de 2012) e integra API de IA (P1).",
+  "classified_at": "2026-11-03T00:00:00-05:00",
+  "classified_by": "trace-classify",
+  "review_trigger": "Reclasificar si se agrega alcance PCI adicional (p. ej. tokenización o cobro recurrente para suscripción P2, cuotas), almacenamiento de datos de pago en el sitio, PII nueva (cuentas, referidos, puntos), integración con Dropi/marketplaces o cambio de pasarela."
+}

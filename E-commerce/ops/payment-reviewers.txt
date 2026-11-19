@@ -1,0 +1,11 @@
+# Revisoras técnicas humanas del camino de pago (constitución IX, constitución 1.2.0 propuesta; research R-15).
+# Un usuario de GitHub por línea. ops/deploy.sh exige, para producción, que TODO commit desde el último despliegue
+# (salvo documentación exenta) venga de un PR fusionado en main y aprobado, sobre su último commit, por alguien de
+# la lista que había en el ÚLTIMO DESPLIEGUE (no la de este commit) distinto de la autora.
+#
+# RÉGIMEN TRANSITORIO (desde 2026-11-13): lista vacía a propósito. Mientras esté vacía, producción queda bloqueada.
+# La dueña del repositorio (saraandradec) no puede figurar como revisora independiente: se ignora. Quien escribió commits
+# del PR tampoco cuenta como revisora de ese PR. El alta inicial solo existe en el PRIMER despliegue a producción.
+# Alta de la primera revisora: agregar su usuario aquí en el PR `integracion` -> `main` que ella aprueba; al desplegar,
+# ops/deploy.sh muestra la lista propuesta y Sara debe escribir ALTA-REVISORA. Las altas siguientes las aprueba alguien
+# que ya esté en la lista. Agregarla también en la línea `*` y en las líneas [PAGO] de .github/CODEOWNERS.

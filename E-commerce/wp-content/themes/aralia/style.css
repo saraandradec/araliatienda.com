@@ -1,0 +1,23 @@
+/*
+Theme Name: Aralía
+Theme URI: https://aralia.example/
+Author: Aralía Beauty Store
+Description: Tema de bloques de Aralía Beauty Store. Tokens en theme.json (claro y oscuro), Cormorant Garamond y Jost auto-alojadas. Sin scripts inline.
+Requires at least: 7.1
+Tested up to: 7.1
+Requires PHP: 8.2
+Version: 0.1.0
+License: Proprietary
+Text Domain: aralia
+*/
+
+/* Estilos propios. El encabezado fijo y los colores por variación viven en theme.json (styles.css) para que sigan a la paleta clara u oscura. */
+.ara-eyebrow { letter-spacing: 0.22em; text-transform: uppercase; }
+.ara-rule { width: 1px; height: 44px; background: linear-gradient(var(--wp--preset--color--champagne), transparent); }
+@media (min-width: 481px) { .ara-rule { height: 56px; } }
+/* El color del foco sale de --ara-focus. Esta hoja NUNCA declara la variable en :root (empataría en especificidad con la variación oscura y, al imprimirse después, ganaría);
+   solo la usa con el color claro como valor por defecto. La define únicamente styles/dark.json (:root) y los fondos ciruela con clase (abajo). */
+a:focus-visible, button:focus-visible { outline: 2px solid var(--ara-focus, var(--wp--preset--color--champagne-ink)); outline-offset: 3px; }
+/* Sobre fondos oscuros el anillo champagne oscurecido no llega a 3:1 (WCAG 1.4.11): se usa rosa. */
+.has-plum-deep-background-color, .has-plum-background-color { --ara-focus: var(--wp--preset--color--rose); }
+@media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }
