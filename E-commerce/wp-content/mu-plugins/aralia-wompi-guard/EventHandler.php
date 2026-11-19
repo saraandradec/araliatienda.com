@@ -396,6 +396,19 @@ final class EventHandler {
 	}
 
 	/**
+	 * Aplica un estado ya verificado (lo usa la conciliación, T063): misma lógica y máquina de estados que el evento, sin `idem_key`.
+	 *
+	 * @param \WC_Order $order     Pedido (recargado dentro del candado).
+	 * @param string    $reference Referencia del intento.
+	 * @param string    $tx_id     Transacción.
+	 * @param string    $status    Estado verificado.
+	 * @return string Acción tomada.
+	 */
+	public function apply_verified( \WC_Order $order, string $reference, string $tx_id, string $status ): string {
+		return $this->apply( $order, $reference, $tx_id, $status );
+	}
+
+	/**
 	 * Aplica un estado verificado por la API al pedido (máquina de estados de data-model §3).
 	 *
 	 * @param \WC_Order $order     Pedido (recargado dentro del candado).
@@ -474,7 +487,11 @@ final class EventHandler {
 			return 'blocked_void';
 		}
 
-		// DECLINED, ERROR o VOIDED de un intento sin pago.
+		// DECLINED, ERROR o VOIDED de un intento sin pago. Si la conciliación ya lo anotó (misma transacción y mismo estado), no se cuenta
+		// otra vez: ni segundo rechazo en el límite por origen, ni segunda alerta ni segundo correo.
+		if ( $this->attempt_has( $order, $reference, $tx_id, $status ) ) {
+			return 'duplicate_ignored';
+		}
 		$this->note_transaction( $order, $reference, $tx_id, $status );
 		if ( $paid ) {
 			if ( ! $this->already_applied( $order, $tx_id ) ) {
@@ -485,12 +502,77 @@ final class EventHandler {
 			return 'blocked_regression';
 		}
 		if ( 'pending' === $stored ) {
-			$this->record_decline( $order );
+			if ( ! $this->flag_is( $order, $reference, 'decline_recorded', $tx_id . '|' . $status ) ) {
+				$this->record_decline( $order );
+				$this->set_flag( $order, $reference, 'decline_recorded', $tx_id . '|' . $status ); // Antes de la alerta y los ganchos: un fallo de ellos no suma otro rechazo al origen.
+			}
 			do_action( 'aralia_alert', 'payment_declines', 'pedido ' . $order->get_id() );
 			do_action( 'aralia_payment_declined', $order->get_id(), $reference );
+			$this->set_flag( $order, $reference, 'decline_counted', $tx_id . '|' . $status ); // Al final: si un gancho cae antes, el reintento repite la alerta y el gancho (no el conteo).
 			return 'declined_recorded';
 		}
 		return 'declined_ignored';
+	}
+
+	/**
+	 * Marca del intento (`decline_recorded`: ya se sumó al límite por origen; `decline_counted`: ya se emitieron la alerta y el gancho), con el valor
+	 * `<transacción>|<estado>`: así solo vale para ESA transacción y ese estado, y un segundo procesamiento (evento tras conciliación, o al revés)
+	 * no cuenta dos veces. Si el proceso cae antes de marcar, el reintento sí lo hace.
+	 *
+	 * @param \WC_Order $order     Pedido.
+	 * @param string    $reference Referencia.
+	 * @param string    $key       Nombre de la marca.
+	 * @param string    $value     Valor.
+	 * @return void
+	 */
+	private function set_flag( \WC_Order $order, string $reference, string $key, string $value ): void {
+		$attempts = $order->get_meta( '_ara_attempts', true );
+		$attempts = is_array( $attempts ) ? $attempts : array();
+		foreach ( $attempts as $i => $attempt ) {
+			if ( is_array( $attempt ) && ( $attempt['reference'] ?? '' ) === $reference ) {
+				$attempts[ $i ][ $key ] = $value;
+			}
+		}
+		$order->update_meta_data( '_ara_attempts', $attempts );
+		$order->save();
+	}
+
+	/**
+	 * ¿La marca del intento tiene este valor?
+	 *
+	 * @param \WC_Order $order     Pedido.
+	 * @param string    $reference Referencia.
+	 * @param string    $key       Nombre de la marca.
+	 * @param string    $value     Valor.
+	 * @return bool
+	 */
+	private function flag_is( \WC_Order $order, string $reference, string $key, string $value ): bool {
+		$attempts = $order->get_meta( '_ara_attempts', true );
+		foreach ( is_array( $attempts ) ? $attempts : array() as $attempt ) {
+			if ( is_array( $attempt ) && ( $attempt['reference'] ?? '' ) === $reference ) {
+				return ( $attempt[ $key ] ?? '' ) === $value;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * ¿El intento de la referencia ya tiene esta transacción anotada con este estado y su rechazo ya contado?
+	 *
+	 * @param \WC_Order $order     Pedido.
+	 * @param string    $reference Referencia.
+	 * @param string    $tx_id     Transacción.
+	 * @param string    $status    Estado.
+	 * @return bool
+	 */
+	private function attempt_has( \WC_Order $order, string $reference, string $tx_id, string $status ): bool {
+		$attempts = $order->get_meta( '_ara_attempts', true );
+		foreach ( is_array( $attempts ) ? $attempts : array() as $attempt ) {
+			if ( is_array( $attempt ) && ( $attempt['reference'] ?? '' ) === $reference ) {
+				return ( $attempt['transaction_id'] ?? '' ) === $tx_id && ( $attempt['status'] ?? '' ) === $status && ( $attempt['decline_counted'] ?? '' ) === $tx_id . '|' . $status;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -518,6 +600,10 @@ final class EventHandler {
 		$attempts = is_array( $attempts ) ? $attempts : array();
 		foreach ( $attempts as $i => $attempt ) {
 			if ( is_array( $attempt ) && ( $attempt['reference'] ?? '' ) === $reference ) {
+				if ( ! empty( $attempts[ $i ]['transaction_id'] ) && $attempts[ $i ]['transaction_id'] !== $tx_id ) {
+					// Otra transacción con la misma referencia: el estado y las marcas de rechazo de la anterior no valen para ella.
+					unset( $attempts[ $i ]['status'], $attempts[ $i ]['declined_at'], $attempts[ $i ]['decline_counted'], $attempts[ $i ]['decline_recorded'] );
+				}
 				$attempts[ $i ]['transaction_id'] = $tx_id;
 				$attempts[ $i ]                   = \Aralia\Orders\Attempts::clear_hints( $attempts[ $i ] ); // El id verificado por el evento reemplaza cualquier pista.
 				if ( null !== $status ) {

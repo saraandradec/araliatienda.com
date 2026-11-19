@@ -50,7 +50,7 @@ Cada decisión sigue el formato Decisión / Justificación / Alternativas. Los I
 4. **Regreso del navegador** (`?id=`): solo pista para consultar; nunca cambia estados (S-2).
 5. **Llave para consultar**: la documentación de Wompi es contradictoria (la página de seguimiento dice "solo llave privada"; otras fuentes, llave pública). **Prueba T-API-AUTH en la fase 1**: si la consulta funciona con la pública, el guard usa la pública; si no, la privada (ya clasificada R).
 
-**Búsqueda por referencia**: no está documentada por Wompi; no se usa. Un pago en el que la clienta cerró el navegador **antes** de que se creara la transacción no existe para Wompi, así que no hay nada que conciliar.
+**Búsqueda por referencia**: no estaba documentada y no se usaba. **Decisión nueva (T063)**: la conciliación SOLO la usa para las pistas y los intentos `OPENED` sin id (nadie los firmó), con la llave PRIVADA, porque es la única forma de acotar el resultado a nuestro comercio; los ids ya firmados por un evento se siguen consultando por id. Alternativa si T-API-AUTH demuestra que `?reference=` no existe o exige `from_date`/`until_date`: esos intentos solo se resuelven por el evento firmado y el aplazamiento del vencimiento. Un pago en el que la clienta cerró el navegador **antes** de que se creara la transacción no existe para Wompi, así que no hay nada que conciliar.
 
 ---
 

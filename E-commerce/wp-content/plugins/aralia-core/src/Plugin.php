@@ -146,11 +146,7 @@ final class Plugin {
 		\Aralia\Rest\PaymentAttempt::register();
 		\Aralia\Rest\OrderStatus::register();
 		\Aralia\Rest\OrderAccess::register_cors_guard();
-		// La conciliación inmediata (T063) llega después: mientras tanto el trabajo encolado por `payment-attempt` termina sin hacer nada.
-		add_action(
-			'aralia_reconcile_order',
-			static function (): void {} // phpcs:ignore Squiz.PHP.NonExecutableCode -- Manejador vacío hasta T063.
-		);
+		// La conciliación inmediata (`aralia_reconcile_order`) la atiende el guard (Reconciler, T063).
 		( new \Aralia\Security\AuditLog( $crypto, $limiter, static fn( string $event, string $ref ) => $alerts->raise( $event, $ref, 'admin_role_change' === $event ) ) )->register_hooks();
 	}
 

@@ -103,4 +103,38 @@ final class WompiFixtures {
 			3
 		);
 	}
+
+	/**
+	 * Simula `GET /v1/transactions?reference=…` (conciliación). `$by_ref`: referencia => lista de array(id, status, cents, currency, reference) | 'down' | 401 | 500.
+	 *
+	 * @param array<string,mixed> $by_ref Respuestas por referencia.
+	 * @return void
+	 */
+	public static function mock_by_reference( array $by_ref ): void {
+		self::$requests = array();
+		add_filter(
+			'pre_http_request',
+			static function ( $pre, $args, $url ) use ( $by_ref ) {
+				if ( false === strpos( (string) $url, 'wompi.co/v1/transactions?reference=' ) ) {
+					return $pre;
+				}
+				self::$requests[] = array( 'url' => (string) $url, 'args' => (array) $args );
+				$ref = rawurldecode( substr( (string) $url, (int) strpos( (string) $url, 'reference=' ) + 10 ) );
+				$r   = $by_ref[ $ref ] ?? array();
+				if ( 'down' === $r ) {
+					return new \WP_Error( 'http_request_failed', 'timeout' );
+				}
+				if ( is_int( $r ) ) {
+					return array( 'headers' => array(), 'body' => '{}', 'response' => array( 'code' => $r, 'message' => '' ), 'cookies' => array(), 'filename' => null );
+				}
+				$data = array();
+				foreach ( $r as $row ) {
+					$data[] = array( 'id' => $row[0], 'status' => $row[1], 'amount_in_cents' => $row[2], 'currency' => $row[3], 'reference' => $row[4], 'payment_method_type' => 'CARD' );
+				}
+				return array( 'headers' => array(), 'body' => (string) wp_json_encode( array( 'data' => $data ) ), 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => null );
+			},
+			10,
+			3
+		);
+	}
 }

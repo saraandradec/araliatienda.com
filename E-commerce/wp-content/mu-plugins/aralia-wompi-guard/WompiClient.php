@@ -33,7 +33,7 @@ final class WompiClient {
 	private string $mode;
 
 	/**
-	 * Motivo del último fallo: '' | 'network' | 'http' | 'auth' | 'no_key' | 'format'. `auth` y `no_key` son de configuración (T-API-AUTH).
+	 * Motivo del último fallo: '' | 'network' | 'server' (429 o 5xx) | 'http' | 'auth' | 'no_key' | 'format'. `auth` y `no_key` son de configuración (T-API-AUTH).
 	 *
 	 * @var string
 	 */
@@ -56,7 +56,7 @@ final class WompiClient {
 	 *         Los datos; `status = 'NOT_FOUND'` si Wompi no la conoce; null si no se pudo saber.
 	 */
 	public function transaction( string $transaction_id ): ?array {
-		if ( 1 !== preg_match( '/^[A-Za-z0-9_.-]{1,64}$/', $transaction_id ) || 1 !== preg_match( '/[A-Za-z0-9]/', $transaction_id ) ) {
+		if ( 1 !== preg_match( '/^[A-Za-z0-9_.-]{1,64}$/D', $transaction_id ) || 1 !== preg_match( '/[A-Za-z0-9]/', $transaction_id ) ) {
 			return self::not_found( $transaction_id );
 		}
 		$this->last_error = '';
@@ -87,7 +87,7 @@ final class WompiClient {
 			return self::not_found( $transaction_id );
 		}
 		if ( 200 !== $code ) {
-			$this->last_error = in_array( $code, array( 401, 403 ), true ) ? 'auth' : 'http';
+			$this->last_error = in_array( $code, array( 401, 403 ), true ) ? 'auth' : ( 429 === $code || $code >= 500 ? 'server' : 'http' );
 			return null;
 		}
 		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
@@ -104,6 +104,71 @@ final class WompiClient {
 			'reference'           => (string) $data['reference'],
 			'payment_method_type' => isset( $data['payment_method_type'] ) && is_scalar( $data['payment_method_type'] ) ? substr( (string) $data['payment_method_type'], 0, 32 ) : '',
 		);
+	}
+
+	/**
+	 * Transacciones de NUESTRO comercio con una referencia: `GET /v1/transactions?reference=…` con la llave PRIVADA. Con ella la lista queda
+	 * acotada al comercio de la llave, a diferencia de `GET /transactions/{id}` (público y global). Sin llave privada no se consulta (`no_key`).
+	 *
+	 * @param string $reference Referencia `<pedido>-<n>`.
+	 * @return array<int,array{id:string,status:string,amount_in_cents:int,currency:string,reference:string,payment_method_type:string}>|null
+	 *         Lista (vacía si no hay); null si no se pudo saber.
+	 */
+	public function by_reference( string $reference ): ?array {
+		$this->last_error = '';
+		if ( 1 !== preg_match( '/^\d+-\d{1,3}$/D', $reference ) ) {
+			return array();
+		}
+		$key = Keys::get( 'private', $this->mode );
+		if ( '' === $key ) {
+			$this->last_error = 'no_key'; // Sin la llave privada no hay forma de acotar la búsqueda a nuestro comercio.
+			return null;
+		}
+		$response = wp_remote_get(
+			self::BASE[ $this->mode ] . '/transactions?reference=' . rawurlencode( $reference ),
+			array(
+				'timeout'     => self::TIMEOUT,
+				'sslverify'   => true,
+				'redirection' => 0,
+				'headers'     => array(
+					'Accept'        => 'application/json',
+					'Authorization' => 'Bearer ' . $key,
+				),
+			)
+		);
+		if ( is_wp_error( $response ) ) {
+			$this->last_error = 'network';
+			return null;
+		}
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( 200 !== $code ) {
+			$this->last_error = in_array( $code, array( 401, 403 ), true ) ? 'auth' : ( 429 === $code || $code >= 500 ? 'server' : 'http' );
+			return null;
+		}
+		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		$rows = is_array( $body ) && isset( $body['data'] ) && is_array( $body['data'] ) ? $body['data'] : null;
+		if ( null === $rows ) {
+			$this->last_error = 'format';
+			return null;
+		}
+		$out = array();
+		foreach ( array_slice( $rows, 0, 20 ) as $data ) {
+			if ( ! is_array( $data ) || ! isset( $data['id'], $data['status'], $data['reference'], $data['amount_in_cents'], $data['currency'] ) || ! is_scalar( $data['id'] ) || ! is_scalar( $data['status'] ) || ! is_scalar( $data['reference'] ) || ! is_scalar( $data['amount_in_cents'] ) || ! is_scalar( $data['currency'] ) ) {
+				continue;
+			}
+			if ( '' === (string) $data['id'] ) {
+				continue; // Una fila sin id no sirve para aplicar un pago.
+			}
+			$out[] = array(
+				'id'                  => substr( (string) $data['id'], 0, 64 ),
+				'status'              => strtoupper( (string) $data['status'] ),
+				'amount_in_cents'     => (int) $data['amount_in_cents'],
+				'currency'            => strtoupper( (string) $data['currency'] ),
+				'reference'           => (string) $data['reference'],
+				'payment_method_type' => isset( $data['payment_method_type'] ) && is_scalar( $data['payment_method_type'] ) ? substr( (string) $data['payment_method_type'], 0, 32 ) : '',
+			);
+		}
+		return $out;
 	}
 
 	/**

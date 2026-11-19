@@ -589,4 +589,23 @@ final class RestPaymentEndpointsTest extends IsolatedTestCase {
 		$this->post( '/payment-attempt', $body );
 		$this->assertContains( 'd', \Aralia\Orders\Attempts::hints( wc_get_order( $o->get_id() )->get_meta( '_ara_attempts', true )[0] ) );
 	}
+
+	public function test_a_hint_for_an_attempt_that_already_has_its_verified_transaction_is_not_looked_up(): void {
+		$o = $this->order();
+		$f = \Aralia\Orders\OrderStore::fresh( $o->get_id() );
+		$f->update_meta_data( '_ara_attempts', array( array( 'n' => 1, 'reference' => $o->get_id() . '-1', 'status' => 'PENDING', 'transaction_id' => 'TX-SIGNED' ) ) );
+		$f->save();
+		$calls = 0;
+		add_filter(
+			'aralia_verify_payment_hint',
+			static function ( $v ) use ( &$calls ) {
+				++$calls;
+				return $v;
+			},
+			20
+		);
+		$res = $this->post( '/payment-attempt', array( 'order_id' => $o->get_id(), 'order_key' => $o->get_order_key(), 'reference' => $o->get_id() . '-1', 'transaction_id' => 'zzz' ) );
+		$this->assertSame( 202, $res->get_status() );
+		$this->assertSame( 0, $calls, 'Sin intento abierto para esa referencia no se gasta una consulta' );
+	}
 }

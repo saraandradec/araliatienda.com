@@ -36,7 +36,7 @@ Wompi ─ POST transaction.updated ─► ?wc-api=wc_wompi → guard (prioridad 
 Gracias: sin terceros; consulta /aralia/v1/order-status (no cambia estados)
 aralia_order_expiry (creación + 30 min): consulta Wompi por cada transaction_id conocido →
   APPROVED → paso 5–6 · PENDING → +15 min (tope 2 h) · API caída o pista reciente que la API aún no conoce (`null`) → +5 min (tope 2 h) · resto, sin transacción, o todas las pistas ignoradas por falsas/ajenas (`NONE`) → cancelled (restaura stock)
-Conciliación cada 5 min: pending y cancelled (≤ 24 h) con transaction_id cuyo estado verificado por la API no se refleja en el pedido → paso 5–6 (sin idem_key)
+Conciliación cada 5 min (`guard/Reconciler.php`): pending y cancelled con intentos sin reflejar (id verificado, pista o `OPENED`), en DOS niveles: los intentos con `transaction_id` (firmado por un evento) se consultan por id; las pistas y los `OPENED` sin id solo se buscan por referencia con la llave PRIVADA (`GET /v1/transactions?reference=`, acotado a nuestro comercio) → paso 5–6 (sin idem_key); aprobados de más de 24 h solo alertan
 ```
 
 ## 3. Verificación de un evento (guard)

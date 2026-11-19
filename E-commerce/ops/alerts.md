@@ -9,7 +9,7 @@ Destinataria: Sara. Fuente: `aralia-core` (clase `Aralia\Security\Alerts`) y Wor
 | `checksum_invalid` | > 5 por hora | Crítico | Guard (T060) |
 | `payment_declines` | > 20 por hora en toda la tienda | Crítico | Guard / AbuseLimits |
 | `pending_unconfirmed_at_cap` | pedido cancelado por el tope de 2 h estando «en proceso» (pista del widget sin evento firmado) | Alto | `Expiry` (T058); revisar en Wompi si el pago fue real |
-| `deferred_unresolved` | evento diferido sin resolver > 15 min | Crítico | Conciliación (T063; T060 solo marca el evento como diferido) |
+| `deferred_unresolved` | evento diferido sin resolver > 15 min | Crítico | Conciliación (`Reconciler`, T063; T060 solo marca el evento como diferido) |
 | `expiry_late` | `aralia_order_expiry` atrasada > 5 min | Crítico | Vigilancia de Action Scheduler (T058: cablear `Alerts::raise( 'expiry_late' )`) |
 | `payment_mismatch` | cada evento cuyo monto, moneda, referencia o estado no coincide con el pedido o con la API de Wompi, o con referencia desconocida | Crítico | Guard (T060, **cableado**) |
 | `duplicate_charge` | otro intento APPROVED sobre un pedido ya pagado (posible doble cobro; runbook `duplicate-charge`, T064) | Crítico | Guard (T060, **cableado**) |
@@ -33,7 +33,7 @@ Destinataria: Sara. Fuente: `aralia-core` (clase `Aralia\Security\Alerts`) y Wor
 
 ## Estado del cableado
 
-Conectados hoy: `admin_role_change` (AuditLog), `blocked_transition`, `nostock`, `expiry_late`, `pending_unconfirmed_at_cap` y `deferred_unresolved` (Orders, T053–T058) y `checksum_invalid`, `payment_mismatch`, `duplicate_charge`, `payment_voided`, `late_payment` y `payment_declines` (guard, T060). Los demás eventos los levantarán las tareas de su flujo: `deferred_unresolved` también desde la conciliación (T063), `script_*` (T138), `low_stock` (T094), copias (T149). Hasta entonces, **no hay alerta** para ellos.
+Conectados hoy: `admin_role_change` (AuditLog), `blocked_transition`, `nostock`, `expiry_late`, `pending_unconfirmed_at_cap` y `deferred_unresolved` (Orders, T053–T058) y `checksum_invalid`, `payment_mismatch`, `duplicate_charge`, `payment_voided`, `late_payment` y `payment_declines` (guard, T060). Los demás eventos los levantarán las tareas de su flujo: `deferred_unresolved` y `late_payment` (aprobado de más de 24 h) también desde la conciliación (T063), `script_*` (T138), `low_stock` (T094), copias (T149). Hasta entonces, **no hay alerta** para ellos.
 
 ## Entrega y destinos
 

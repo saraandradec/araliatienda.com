@@ -99,7 +99,7 @@ final class PaymentAttempt {
 		}
 		$reference = (string) $request->get_param( 'reference' );
 		$tx_id     = (string) $request->get_param( 'transaction_id' );
-		if ( 1 !== preg_match( '/^(\d+)-(\d{1,3})$/', $reference, $m ) || (int) $m[1] !== $order->get_id() || 1 !== preg_match( '/^[A-Za-z0-9_.-]{1,64}$/', $tx_id ) || 1 !== preg_match( '/[A-Za-z0-9]/', $tx_id ) || ! self::is_attempt( $order, $reference ) ) {
+		if ( 1 !== preg_match( '/^(\d+)-(\d{1,3})$/D', $reference, $m ) || (int) $m[1] !== $order->get_id() || 1 !== preg_match( '/^[A-Za-z0-9_.-]{1,64}$/D', $tx_id ) || 1 !== preg_match( '/[A-Za-z0-9]/', $tx_id ) || ! self::is_attempt( $order, $reference ) ) {
 			return OrderAccess::error( 'aralia_invalid_attempt', 'Los datos del pago no son válidos.', 400 );
 		}
 		if ( 'pending' !== \Aralia\Orders\StateMachine::stored_status( $order->get_id() ) ) {
@@ -109,6 +109,18 @@ final class PaymentAttempt {
 		$known = $order->get_meta( '_ara_attempts', true );
 		if ( Attempts::total_hints( is_array( $known ) ? $known : array() ) >= Attempts::MAX_HINTS ) {
 			return self::accepted(); // Lista llena: la pista nueva se descartaría; no se gasta una consulta a la API.
+		}
+		$open = false;
+		foreach ( is_array( $known ) ? $known : array() as $row ) {
+			if ( is_array( $row ) && ( $row['reference'] ?? '' ) === $reference ) {
+				if ( in_array( $tx_id, Attempts::hints( $row ), true ) ) {
+					return self::accepted(); // Pista repetida: no se gasta otra consulta a la API.
+				}
+				$open = empty( $row['transaction_id'] );
+			}
+		}
+		if ( ! $open ) {
+			return self::accepted(); // El intento ya tiene su transacción verificada: la pista no se guardaría.
 		}
 		/**
 		 * El guard verifica la pista contra la API de Wompi: `valid` (la transacción existe y es de este pedido: referencia, monto y COP),
@@ -124,7 +136,9 @@ final class PaymentAttempt {
 			// Respuesta uniforme (202) sin guardar: así quien tiene la clave no usa el endpoint para sondear si un id existe en Wompi.
 			return self::accepted();
 		}
-		self::annotate( $order->get_id(), $reference, $tx_id );
+		if ( ! self::annotate( $order->get_id(), $reference, $tx_id ) ) {
+			return self::accepted(); // Pista repetida, descartada (lista llena) o sin candado: nada nuevo que conciliar ni encolar.
+		}
 		/**
 		 * Hay una pista de transacción para el pedido: la conciliación (T063) la consulta de inmediato.
 		 *
@@ -177,12 +191,13 @@ final class PaymentAttempt {
 	 * @param int    $order_id  Pedido.
 	 * @param string $reference Referencia.
 	 * @param string $tx_id     Transacción.
-	 * @return void
+	 * @return bool ¿Se guardó una pista nueva?
 	 */
-	private static function annotate( int $order_id, string $reference, string $tx_id ): void {
+	private static function annotate( int $order_id, string $reference, string $tx_id ): bool {
+		$saved = false;
 		OrderLock::run(
 			$order_id,
-			static function () use ( $order_id, $reference, $tx_id ): void {
+			static function () use ( $order_id, $reference, $tx_id, &$saved ): void {
 				$fresh = OrderStore::fresh( $order_id );
 				if ( ! $fresh instanceof \WC_Order ) {
 					return;
@@ -206,9 +221,11 @@ final class PaymentAttempt {
 				if ( $changed ) {
 					$fresh->update_meta_data( '_ara_attempts', $attempts );
 					$fresh->save();
+					$saved = true;
 				}
 			}
 		);
 		// Si no se pudo tomar el candado, la pista se pierde: es opcional (el evento de Wompi y la conciliación la repiten).
+		return $saved;
 	}
 }

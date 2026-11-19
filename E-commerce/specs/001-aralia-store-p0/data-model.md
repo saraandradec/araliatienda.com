@@ -97,7 +97,7 @@ Meta propia: `_ara_group_id` (uuid), `_ara_set_id`, `_ara_set_kind`, `_ara_tone_
 | `age_declared`, `terms_version`, `newsletter_optin` | campos adicionales | C |
 | Envío (`aralia_city_rate`) | WC shipping line | P |
 | Total | calculado en servidor | — |
-| Intentos de pago | meta `_ara_attempts` (lista de {n, reference `<order_id>-<n>`, transaction_id? (verificado), hint_transaction_ids? (hasta 3 pistas por pedido del widget sin verificar; nunca se expulsan), hint_at? (llegada de la primera pista), status, at (creación; no se reescribe), declined_at?}); huella de la sesión que creó el pedido en `_ara_session_hash` (HMAC, no el id) | C |
+| Intentos de pago | meta `_ara_attempts` (lista de {n, reference `<order_id>-<n>`, transaction_id? (verificado), hint_transaction_ids? (hasta 3 pistas por pedido del widget sin verificar; nunca se expulsan), hint_at? (llegada de la primera pista), status, at (creación; no se reescribe), declined_at?}); huella de la sesión que creó el pedido en `_ara_session_hash` (HMAC, no el id); metas de la conciliación: `_ara_recon_at` (última revisión), `_ara_recon_last` (último resultado anotado: `tx|estado|resultado`), `_ara_old_payment_alerted` y `_ara_deferred_alerted` (alerta ya emitida) | C |
 | Vencimiento propio | meta `_ara_expires_at` (UTC; creación + 30 min, extensible hasta + 2 h) | — |
 | Analítica | meta `_ara_ga_client_id`, `_ara_fbp`, `_ara_fbc`, `_ara_purchase_sent` | C |
 | Reembolso/reversión manual | meta `_ara_refund_log` (lista de {tipo: refund_total, refund_partial, reversal; monto, fecha, motivo, ref_wompi, usuario}) | C |
