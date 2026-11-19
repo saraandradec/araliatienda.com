@@ -23,7 +23,8 @@ Checkout (bloques) ─ "Pagar" ─► plugin.process_payment(): pedido `pending`
 order-pay (guard):
   si algún intento con transaction_id está PENDING (consulta API) → "Tienes un pago en proceso", sin widget (R-02 §3b)
   si aperturas > 30 o rechazos ≥ 5 en la última hora → order-pay bloqueado
-  n = intentos + 1 (persistido antes de renderizar); reference = "<order_id>-<n>"; firma = SHA256(reference + amount_in_cents + "COP" + integrity)
+  n = mayor n existente + 1 (persistido ANTES de abrir el widget, por el POST `aralia/v1/order-pay/open`, bajo el candado del pedido; el último intento sin transacción de < 60 s se reutiliza); reference = "<order_id>-<n>"; firma = SHA256(reference + amount_in_cents + "COP" + integrity) calculada en el servidor
+  no abre si: reserva vencida, pedido no `pending`, 30 aperturas/h, 5 rechazos/h, > 10 rechazos/h del origen (D-2), un intento de ESTE pedido con transacción PENDING/APPROVED, la API no responde, o la API aún no refleja un id verificado de < 10 min
   carga checkout.wompi.co/widget.js → new WidgetCheckout({publicKey, currency:"COP", amountInCents, reference,
         signature:{integrity}, redirectUrl: Gracias}).open(cb)
   cb(result): POST /aralia/v1/payment-attempt {order_id, order_key, reference, transaction_id} (pista)
@@ -34,7 +35,7 @@ Wompi ─ POST transaction.updated ─► ?wc-api=wc_wompi → guard (prioridad 
   6 máquina de estados (data-model §3) · 7 responder y exit
 Gracias: sin terceros; consulta /aralia/v1/order-status (no cambia estados)
 aralia_order_expiry (creación + 30 min): consulta Wompi por cada transaction_id conocido →
-  APPROVED → paso 5–6 · PENDING → +15 min (tope 2 h) · resto o sin transacción → cancelled (restaura stock)
+  APPROVED → paso 5–6 · PENDING → +15 min (tope 2 h) · API caída o pista reciente que la API aún no conoce (`null`) → +5 min (tope 2 h) · resto, sin transacción, o todas las pistas ignoradas por falsas/ajenas (`NONE`) → cancelled (restaura stock)
 Conciliación cada 5 min: pending y cancelled (≤ 24 h) con transaction_id cuyo estado verificado por la API no se refleja en el pedido → paso 5–6 (sin idem_key)
 ```
 

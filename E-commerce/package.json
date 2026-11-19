@@ -11,7 +11,7 @@
     "env:cli": "wp-env run cli",
     "build": "wp-scripts build --webpack-src-dir=wp-content/plugins/aralia-core/blocks --output-path=wp-content/plugins/aralia-core/build",
     "start": "wp-scripts start --webpack-src-dir=wp-content/plugins/aralia-core/blocks --output-path=wp-content/plugins/aralia-core/build",
-    "lint:js": "wp-scripts lint-js wp-content/plugins/aralia-core wp-content/themes/aralia tests/e2e",
+    "lint:js": "wp-scripts lint-js wp-content/plugins/aralia-core wp-content/mu-plugins/aralia-wompi-guard/assets wp-content/themes/aralia tests/e2e",
     "test:e2e": "playwright test",
     "test:lighthouse": "lhci autorun"
   },

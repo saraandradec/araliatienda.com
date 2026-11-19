@@ -199,6 +199,10 @@ final class StockOnCreate {
 			return;
 		}
 		$order->update_meta_data( '_ara_expires_at', (string) ( Clock::now() + self::HOLD_SECONDS ) );
+		// Huella de la sesión que creó el pedido: `order-status` la exige (junto con la clave) para mostrar el estado.
+		if ( '' === (string) $order->get_meta( '_ara_session_hash', true ) && function_exists( 'WC' ) && is_object( WC()->session ) && method_exists( WC()->session, 'get_customer_id' ) && '' !== (string) WC()->session->get_customer_id() ) {
+			$order->update_meta_data( '_ara_session_hash', \Aralia\Rest\OrderAccess::session_hash( (string) WC()->session->get_customer_id() ) );
+		}
 		$abuse = self::abuse_meta( $order );
 		foreach ( $abuse as $key => $value ) {
 			$order->update_meta_data( $key, $value );

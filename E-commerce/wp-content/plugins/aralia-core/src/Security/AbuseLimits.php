@@ -244,6 +244,22 @@ class AbuseLimits {
 	}
 
 	/**
+	 * ¿Esa IP superó el tope de rechazos de la hora (más de 10: bloqueo, threat-model D-2)? Order-pay lo consulta antes de abrir otro intento.
+	 *
+	 * @param string $ip IP.
+	 * @return bool
+	 */
+	public function declines_blocked( string $ip ): bool {
+		try {
+			$key = $this->crypto->ip_key( $ip );
+			return $this->limiter->count( $key, 'decline_block', self::WINDOW ) > 0 || $this->limiter->count( $key, 'decline', self::WINDOW ) > self::DECLINES_BLOCK;
+		} catch ( \Throwable $e ) {
+			unset( $e );
+			return true; // Sin limitador, se niega (falla cerrado).
+		}
+	}
+
+	/**
 	 * Registra un intento de código de descuento. Falla cerrado si el limitador no responde.
 	 *
 	 * @param string $session_id Identificador de sesión (cualquier valor: se limita su longitud).

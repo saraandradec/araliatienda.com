@@ -94,7 +94,17 @@ final class Expiry {
 	 */
 	public static function run( $order_id ): void {
 		$order_id = (int) $order_id;
-		if ( $order_id <= 0 || ! self::lock( $order_id ) ) {
+		if ( $order_id <= 0 ) {
+			return;
+		}
+		if ( ! self::lock( $order_id ) ) {
+			// Otro proceso (webhook, order-pay) tiene el candado: no se pierde la acción, se reprograma en 1 minuto.
+			$order = wc_get_order( $order_id );
+			$born  = $order instanceof \WC_Order && $order->get_date_created() ? $order->get_date_created()->getTimestamp() : Clock::now();
+			// Sin pasar de creación + tope de 2 h + margen: un candado que alguien retenga sin fin no aplaza el vencimiento para siempre.
+			if ( 'pending' === StateMachine::stored_status( $order_id ) && Clock::now() + MINUTE_IN_SECONDS <= $born + self::MAX_AGE + 5 * MINUTE_IN_SECONDS ) {
+				self::schedule( $order_id, Clock::now() + MINUTE_IN_SECONDS );
+			}
 			return;
 		}
 		try {
@@ -111,7 +121,7 @@ final class Expiry {
 	 * @return void
 	 */
 	private static function process( int $order_id ): void {
-		$order = wc_get_order( $order_id );
+		$order = OrderStore::fresh( $order_id );
 		if ( ! $order instanceof \WC_Order || 'pending' !== $order->get_status() ) {
 			return;
 		}
@@ -145,6 +155,10 @@ final class Expiry {
 			self::postpone( $order, min( $now + $next, $created + self::MAX_AGE ) );
 			return;
 		}
+		if ( $at_cap && 'PENDING' === $status ) {
+			// Había un pago «en proceso» (p. ej. una pista aprobada sin evento firmado) y se cancela por el tope: que Sara lo revise en Wompi.
+			do_action( 'aralia_alert', 'pending_unconfirmed_at_cap', 'pedido ' . $order_id );
+		}
 		StateMachine::run_as(
 			StateMachine::SYSTEM,
 			static function () use ( $order, $at_cap ): void {
@@ -165,7 +179,15 @@ final class Expiry {
 	private static function has_transaction( \WC_Order $order ): bool {
 		$attempts = $order->get_meta( '_ara_attempts', true );
 		foreach ( is_array( $attempts ) ? $attempts : array() as $attempt ) {
-			if ( is_array( $attempt ) && ! empty( $attempt['transaction_id'] ) ) {
+			if ( ! is_array( $attempt ) ) {
+				continue;
+			}
+			if ( ! empty( $attempt['transaction_id'] ) ) {
+				return true;
+			}
+			// Una pista sin verificar también cuenta como "puede haber un pago": con la API caída se aplaza (no se cancela); si la API funciona
+			// y la pista es falsa o ajena, Lookup devuelve NONE y se cancela a tiempo.
+			if ( array() !== Attempts::hints( $attempt ) ) {
 				return true;
 			}
 		}
@@ -288,6 +310,8 @@ final class Expiry {
 	 * Candado por pedido, atómico: `INSERT IGNORE` (solo uno gana) y, para robar uno vencido, un `UPDATE` condicionado al valor leído.
 	 * Es exclusión de mejor esfuerzo sobre la tabla de opciones; la segunda barrera es que `process()` vuelve a leer el estado y la
 	 * máquina de estados (que lee la base sin caché) rechaza cancelar un pedido ya pagado.
+	 *
+	 * Para código de pedidos (guard, order-pay, pistas) usar `OrderLock`: es la misma política con reintentos.
 	 *
 	 * @param int $order_id Pedido.
 	 * @return bool

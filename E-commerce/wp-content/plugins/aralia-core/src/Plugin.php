@@ -143,6 +143,14 @@ final class Plugin {
 		\Aralia\Orders\StateMachine::register();
 		\Aralia\Orders\StockOnCreate::register( static fn() => $crypto ? new \Aralia\Security\AbuseLimits( $limiter, $crypto ) : null );
 		\Aralia\Orders\Expiry::register();
+		\Aralia\Rest\PaymentAttempt::register();
+		\Aralia\Rest\OrderStatus::register();
+		\Aralia\Rest\OrderAccess::register_cors_guard();
+		// La conciliación inmediata (T063) llega después: mientras tanto el trabajo encolado por `payment-attempt` termina sin hacer nada.
+		add_action(
+			'aralia_reconcile_order',
+			static function (): void {} // phpcs:ignore Squiz.PHP.NonExecutableCode -- Manejador vacío hasta T063.
+		);
 		( new \Aralia\Security\AuditLog( $crypto, $limiter, static fn( string $event, string $ref ) => $alerts->raise( $event, $ref, 'admin_role_change' === $event ) ) )->register_hooks();
 	}
 

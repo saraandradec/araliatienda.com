@@ -36,5 +36,6 @@ final class Guard {
 		Neutralize::register();
 		EventHandler::register();
 		Lookup::register();
+		OrderPay::register();
 	}
 }

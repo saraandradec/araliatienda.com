@@ -371,6 +371,7 @@ final class EventHandlerTest extends DatabaseTestCase {
 		$this->assertSame( 'declined_recorded', $res['body']['result'] );
 		$this->assertSame( 'pending', $this->status( $o ) );
 		$this->assertSame( 'DECLINED', wc_get_order( $o->get_id() )->get_meta( '_ara_attempts', true )[0]['status'] );
+		$this->assertNotEmpty( wc_get_order( $o->get_id() )->get_meta( '_ara_attempts', true )[0]['declined_at'], 'Hora del rechazo para la ventana de 5 por hora de order-pay' );
 		$this->assertSame( array( array( $o->get_id(), $this->ref( $o ) ) ), $hooked );
 		$this->assertContains( 'payment_declines', array_column( $this->alerts, 0 ) );
 	}

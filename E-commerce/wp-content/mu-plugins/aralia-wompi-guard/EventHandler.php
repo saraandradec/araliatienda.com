@@ -24,6 +24,11 @@ final class EventHandler {
 	public const MAX_BODY = 65536;
 
 	/**
+	 * Intentos de 200 ms para tomar el candado del pedido (5 s): el webhook espera más que una pista, y Wompi reintenta si no se logra.
+	 */
+	public const LOCK_TRIES = 25;
+
+	/**
 	 * Filas de rechazo (checksum o estructura inválidos) que se registran por hora: por IP y en total.
 	 */
 	public const REJECT_LOG_PER_IP = 20;
@@ -258,7 +263,7 @@ final class EventHandler {
 		}
 
 		// 6. Estado: candado del pedido, luego idem_key, luego el cambio (así dos procesos no lo cambian dos veces).
-		if ( ! $this->acquire( $order->get_id() ) ) {
+		if ( ! \Aralia\Orders\OrderLock::acquire( $order->get_id(), self::LOCK_TRIES ) ) {
 			PaymentEvents::update( $id, array( 'action_taken' => 'lock_busy' ) );
 			return $this->reply( 503, 'busy' ); // Sin idem_key: el reintento de Wompi sí se procesa.
 		}
@@ -279,7 +284,7 @@ final class EventHandler {
 			$state->finished = false;
 			register_shutdown_function( array( self::class, 'release_if_unfinished' ), $state, $id, $order->get_id() );
 			try {
-				$fresh  = $this->fresh_order( $order->get_id() );
+				$fresh  = \Aralia\Orders\OrderStore::fresh( $order->get_id() );
 				$result = $fresh instanceof \WC_Order ? $this->apply( $fresh, $reference, (string) $tx['id'], $api['status'] ) : 'order_missing';
 			} catch ( \Throwable $e ) {
 				unset( $e );
@@ -297,7 +302,7 @@ final class EventHandler {
 			PaymentEvents::update( $id, array( 'action_taken' => substr( $result, 0, 64 ) ) );
 			$code = 200;
 		} finally {
-			\Aralia\Orders\Expiry::unlock( $order->get_id() );
+			\Aralia\Orders\OrderLock::release( $order->get_id() );
 		}
 		return $this->reply( $code, $result );
 	}
@@ -315,7 +320,7 @@ final class EventHandler {
 		if ( empty( $state->finished ) ) {
 			PaymentEvents::release_idem( $id );
 			if ( $order_id > 0 ) {
-				\Aralia\Orders\Expiry::unlock( $order_id );
+				\Aralia\Orders\OrderLock::release( $order_id );
 			}
 		}
 	}
@@ -347,16 +352,16 @@ final class EventHandler {
 	 * @return bool False si el candado está ocupado (el llamador responde 503).
 	 */
 	private function note_under_lock( int $order_id, string $reference, string $tx_id ): bool {
-		if ( ! $this->acquire( $order_id ) ) {
+		if ( ! \Aralia\Orders\OrderLock::acquire( $order_id ) ) {
 			return false;
 		}
 		try {
-			$locked = $this->fresh_order( $order_id );
+			$locked = \Aralia\Orders\OrderStore::fresh( $order_id );
 			if ( $locked instanceof \WC_Order ) {
 				$this->note_transaction( $locked, $reference, $tx_id, null );
 			}
 		} finally {
-			\Aralia\Orders\Expiry::unlock( $order_id );
+			\Aralia\Orders\OrderLock::release( $order_id );
 		}
 		return true;
 	}
@@ -388,26 +393,6 @@ final class EventHandler {
 		if ( $by_ip <= self::REJECT_LOG_PER_IP ) {
 			PaymentEvents::insert( array( 'action_taken' => $action ) );
 		}
-	}
-
-	/**
-	 * Pedido recargado de la base de datos (sin la copia de la caché de objetos de la petición).
-	 *
-	 * @param int $order_id Pedido.
-	 * @return \WC_Order|null
-	 */
-	private function fresh_order( int $order_id ): ?\WC_Order {
-		clean_post_cache( $order_id );
-		wp_cache_delete( $order_id, 'orders' );
-		if ( function_exists( 'wc_get_container' ) && class_exists( '\\Automattic\\WooCommerce\\Caching\\OrderCache' ) ) {
-			try {
-				wc_get_container()->get( \Automattic\WooCommerce\Caching\OrderCache::class )->remove( $order_id );
-			} catch ( \Throwable $e ) {
-				unset( $e );
-			}
-		}
-		$order = wc_get_order( $order_id );
-		return $order instanceof \WC_Order ? $order : null;
 	}
 
 	/**
@@ -534,8 +519,13 @@ final class EventHandler {
 		foreach ( $attempts as $i => $attempt ) {
 			if ( is_array( $attempt ) && ( $attempt['reference'] ?? '' ) === $reference ) {
 				$attempts[ $i ]['transaction_id'] = $tx_id;
+				$attempts[ $i ]                   = \Aralia\Orders\Attempts::clear_hints( $attempts[ $i ] ); // El id verificado por el evento reemplaza cualquier pista.
 				if ( null !== $status ) {
 					$attempts[ $i ]['status'] = $status;
+					// Hora del rechazo (la ventana de 5 rechazos por hora de OrderPay se mide desde aquí).
+					if ( in_array( $status, array( 'DECLINED', 'ERROR', 'VOIDED' ), true ) && empty( $attempts[ $i ]['declined_at'] ) ) {
+						$attempts[ $i ]['declined_at'] = gmdate( 'c' );
+					}
 				}
 				// La hora del intento no se reescribe: la ventana de 10 min de `api_lag` y de Lookup se mide desde su creación.
 				if ( empty( $attempts[ $i ]['at'] ) ) {
@@ -586,22 +576,6 @@ final class EventHandler {
 		} catch ( \Throwable $e ) {
 			unset( $e ); // Sin llaves de privacidad o limitador caído: el rechazo igual queda registrado.
 		}
-	}
-
-	/**
-	 * Toma el candado del pedido (reintenta unos instantes si otro proceso lo tiene).
-	 *
-	 * @param int $order_id Pedido.
-	 * @return bool
-	 */
-	private function acquire( int $order_id ): bool {
-		for ( $i = 0; $i < 5; $i++ ) {
-			if ( Expiry::lock( $order_id ) ) {
-				return true;
-			}
-			usleep( 200000 );
-		}
-		return false;
 	}
 
 	/**

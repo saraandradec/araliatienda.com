@@ -10,6 +10,8 @@ namespace {
 	define( 'ARALIA_CORE_VERSION', '0.0.0' );
 	define( 'ARALIA_CORE_FILE', __FILE__ );
 	define( 'ARALIA_CORE_DIR', __DIR__ . '/' );
+	define( 'COOKIEHASH', 'abc' );
+	define( 'WPMU_PLUGIN_URL', 'https://example.test/wp-content/mu-plugins' );
 
 	class WP_CLI {
 		/**

@@ -60,11 +60,11 @@ final class GuardSetupTest extends IsolatedTestCase {
 		$this->assertStringContainsString( 'Wompi', $raw, 'Los demás ajustes sí se guardan' );
 	}
 
-	public function test_without_keys_for_the_current_mode_the_payment_method_is_not_offered(): void {
+	public function test_the_payment_method_is_offered_in_test_mode_and_prod_mode_has_no_keys(): void {
 		$gateways = array( 'wompi' => new \stdClass(), 'bacs' => new \stdClass() );
 		$this->assertTrue( Keys::available(), 'Modo prueba: hay llaves de prueba' );
-		$this->assertFalse( Keys::checkout_ready(), 'Hasta T061 (order-pay propio) el medio de pago no se ofrece: el widget del plugin cobraría sin poder pagar el pedido' );
-		$this->assertArrayNotHasKey( 'wompi', Keys::require_keys( $gateways ) );
+		$this->assertTrue( Keys::checkout_ready(), 'Con llaves y order-pay propio, el medio de pago se ofrece' );
+		$this->assertArrayHasKey( 'wompi', Keys::require_keys( $gateways ) );
 		$this->assertFalse( Keys::available( 'prod' ), 'Sin constantes de producción, el modo producción no tiene llaves' );
 		$this->assertArrayHasKey( 'bacs', Keys::require_keys( $gateways ) );
 	}
@@ -215,7 +215,7 @@ final class GuardSetupTest extends IsolatedTestCase {
 		do_action( 'woocommerce_receipt_wompi', 1 );
 		$html = (string) ob_get_clean();
 		$this->assertSame( 0, \Wompi_Portal_Pagos_Gateway_Custom::$called, 'El widget del plugin no se renderiza' );
-		$this->assertStringContainsString( 'no está disponible', $html );
+		$this->assertSame( '', trim( $html ), 'El widget del plugin no pinta nada: el order-pay propio (con pedido real) lo sustituye' );
 	}
 
 	public function test_the_real_rest_endpoint_of_the_gateway_never_returns_the_keys(): void {
@@ -305,5 +305,52 @@ final class GuardSetupTest extends IsolatedTestCase {
 			'local con testmode=no'              => array( null, 'local', 'no', 'prod' ),
 			'local sin testmode'                 => array( null, 'local', '', 'prod' ),
 		);
+	}
+
+	public function test_lookup_ignores_a_seeded_hint_the_api_does_not_know_and_counts_a_verified_pending_one(): void {
+		$o = wc_create_order();
+		$o->set_total( '35000' );
+		$o->update_meta_data( '_ara_attempts', array( array( 'n' => 1, 'reference' => '1-1', 'hint_transaction_id' => 'zzz', 'at' => gmdate( 'c', time() - HOUR_IN_SECONDS ) ) ) );
+		$o->save();
+		$res = static fn() => Lookup::for_order( null, wc_get_order( $o->get_id() ) );
+
+		WompiFixtures::mock_api( array() ); // La API no conoce 'zzz' y el intento es viejo.
+		$this->assertSame( 'NONE', $res(), 'Una pista falsa se ignora: «no hay pago» (el vencimiento cancela a tiempo), no «rechazado»' );
+
+		remove_all_filters( 'pre_http_request' );
+		WompiFixtures::mock_api( array( 'zzz' => array( 'PENDING', 3500000, 'COP', '9-9' ) ) ); // Existe, pero es de otra referencia.
+		$this->assertSame( 'NONE', $res(), 'Ni una transacción real de otro pedido cuenta' );
+
+		remove_all_filters( 'pre_http_request' );
+		WompiFixtures::mock_api( array( 'zzz' => 'down' ) );
+		$this->assertNull( $res(), 'API caída: no se sabe' );
+
+		remove_all_filters( 'pre_http_request' );
+		WompiFixtures::mock_api( array( 'zzz' => array( 'PENDING', 3500000, 'COP', '1-1' ) ) ); // La pista era buena.
+		$this->assertSame( 'PENDING', $res(), 'Una pista que la API confirma como de este intento sí cuenta' );
+		$o->delete( true );
+	}
+
+	public function test_hint_verification_distinguishes_valid_invalid_and_unknown(): void {
+		$o = wc_create_order();
+		$o->set_total( '35000' );
+		$o->save();
+		WompiFixtures::mock_api(
+			array(
+				'TX-OK'   => array( 'PENDING', 3500000, 'COP', '5-1' ),
+				'TX-REF'  => array( 'PENDING', 3500000, 'COP', '6-1' ),
+				'TX-COST' => array( 'PENDING', 100, 'COP', '5-1' ),
+				'TX-USD'  => array( 'PENDING', 3500000, 'USD', '5-1' ),
+				'TX-DOWN' => 'down',
+			)
+		);
+		$check = static fn( string $tx ) => Lookup::verify_hint( 'unknown', wc_get_order( $o->get_id() ), '5-1', $tx );
+		$this->assertSame( 'valid', $check( 'TX-OK' ) );
+		$this->assertSame( 'invalid', $check( 'TX-REF' ), 'Otra referencia' );
+		$this->assertSame( 'invalid', $check( 'TX-COST' ), 'Otro monto' );
+		$this->assertSame( 'invalid', $check( 'TX-USD' ), 'Otra moneda' );
+		$this->assertSame( 'unknown', $check( 'TX-DOWN' ), 'API caída' );
+		$this->assertSame( 'unknown', $check( 'TX-NOPE' ), 'La API no la conoce todavía' );
+		$o->delete( true );
 	}
 }

@@ -243,14 +243,14 @@ final class Keys {
 	}
 
 	/**
-	 * ¿Se puede ofrecer el medio de pago? Hace falta el juego de llaves del modo vigente Y el order-pay propio del guard (T061): con el
+	 * ¿Se puede ofrecer el medio de pago? Hace falta el juego de llaves del modo vigente Y el order-pay propio del guard (T061), ENGANCHADO (no basta con que la clase exista): con el
 	 * widget del plugin oficial la referencia no lleva intento (`<pedido>-<n>`) y el pago se cobraría sin que el pedido pudiera
 	 * marcarse como pagado.
 	 *
 	 * @return bool
 	 */
 	public static function checkout_ready(): bool {
-		return self::available() && class_exists( '\\Aralia\\Guard\\OrderPay' );
+		return self::available() && false !== has_action( 'woocommerce_receipt_wompi', array( OrderPay::class, 'render' ) );
 	}
 
 	/**
